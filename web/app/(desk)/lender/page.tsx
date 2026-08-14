@@ -3,7 +3,7 @@ import { LenderDesk } from "@/components/lender-desk";
 
 export default function LenderPage() {
   return (
-    <DeskFrame lede="Check one invoice without receiving the whole customer list." title="Review an invoice">
+    <DeskFrame lede="Pick one invoice, press Check, then Pledge if you will fund it." title="Review an invoice">
       <LenderDesk />
     </DeskFrame>
   );

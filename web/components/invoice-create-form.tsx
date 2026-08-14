@@ -114,9 +114,10 @@ export function InvoiceCreateForm({ onCreated }: Props) {
         <p className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">New receivable</p>
         <h2 className="mt-2 text-xl font-medium tracking-[-0.5px]">Seal an invoice</h2>
         <p className="mt-2 max-w-2xl text-sm text-[var(--landing-muted-fg)]">
-          The browser encrypts the invoice to the measured TEE before delivery. Lenders receive only its commitment.
+          Fill a demo invoice, then press Seal invoice.
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <p className="mt-5 text-sm font-medium">1. Fill a demo invoice</p>
+        <div className="mt-2 flex flex-wrap gap-2">
           {DEMO_INVOICES.map((demo, index) => (
             <button
               className={secondaryBtn}
@@ -213,9 +214,10 @@ export function InvoiceCreateForm({ onCreated }: Props) {
         {success ? <p className="text-sm">{success}</p> : null}
       </div>
 
+      <p className="mt-8 text-sm font-medium">2. Seal invoice</p>
       <button
         aria-busy={busy}
-        className={`${primaryBtn} mt-6`}
+        className={`${primaryBtn} mt-2`}
         disabled={!walletReady || busy}
         type="submit"
       >

@@ -29,16 +29,25 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const [transaction, receipt] = await Promise.all([
-      rpc<{ input: string; to: string }>("eth_getTransactionByHash", [body.txHash]),
-      rpc<{ status: string }>("eth_getTransactionReceipt", [body.txHash]),
-    ]);
+    let transaction: { input: string; to: string } | null = null;
+    let receipt: { status: string } | null = null;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      [transaction, receipt] = await Promise.all([
+        rpc<{ input: string; to: string }>("eth_getTransactionByHash", [body.txHash]),
+        rpc<{ status: string }>("eth_getTransactionReceipt", [body.txHash]),
+      ]);
+      if (transaction && receipt) break;
+      await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+    }
     const expectedInput =
       `${COMMAND_SELECTORS[command]}${body.commitment.slice(2)}`.toLowerCase();
+    if (!transaction || !receipt) {
+      return NextResponse.json({ error: "Coston2 has not published this transaction yet" }, { status: 409 });
+    }
+    if (receipt.status !== "0x1") {
+      return NextResponse.json({ error: "instruction reverted on Coston2" }, { status: 422 });
+    }
     if (
-      !transaction ||
-      !receipt ||
-      receipt.status !== "0x1" ||
       transaction.to?.toLowerCase() !== INSTRUCTION_SENDER ||
       transaction.input?.toLowerCase() !== expectedInput
     ) {

@@ -3,7 +3,7 @@ import { BorrowerDesk } from "@/components/borrower-desk";
 
 export default function BorrowerPage() {
   return (
-    <DeskFrame lede="Choose the receivable you want funded." title="Invoices">
+    <DeskFrame lede="Fill a demo invoice, then press Seal invoice." title="Invoices">
       <BorrowerDesk />
     </DeskFrame>
   );
