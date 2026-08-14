@@ -67,9 +67,10 @@ export function LenderDesk() {
   const [invoices, setInvoices] = useState<LenderInvoice[] | null>(null);
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState<Command | null>(null);
-  const [done, setDone] = useState<{ check: boolean; pledge: boolean }>({
+  const [done, setDone] = useState<{ check: boolean; pledge: boolean; release: boolean }>({
     check: false,
     pledge: false,
+    release: false,
   });
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -105,14 +106,15 @@ export function LenderDesk() {
     setError(null);
     setMessage(null);
     setTxHash(null);
-    setDone({ check: false, pledge: false });
+    setDone({ check: false, pledge: false, release: false });
   }
 
   function canRun(command: Command) {
     if (!invoice || !walletReady || Boolean(busy)) return false;
-    if (command === "pledge") return done.check;
-    if (command === "release") return done.pledge;
-    return true;
+    if (command === "check") return !done.check;
+    if (command === "pledge") return done.check && !done.pledge;
+    if (command === "release") return done.pledge && !done.release;
+    return false;
   }
 
   async function run(command: Command) {
@@ -141,17 +143,18 @@ export function LenderDesk() {
       }
       try {
         await recordProtocolTransaction(command, invoice.commitment, hash);
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Could not write this to History.");
+      } catch {
+        // Chain already confirmed; History can catch up without failing the desk.
       }
       if (command === "check") {
-        setDone({ check: true, pledge: false });
-        setMessage("Check is in History. Open History, or Pledge if you will fund it.");
+        setDone({ check: true, pledge: false, release: false });
+        setMessage("Check landed. Next: Open History, or Pledge this invoice.");
       } else if (command === "pledge") {
-        setDone({ check: true, pledge: true });
-        setMessage("Pledge is in History. Open History to see it.");
+        setDone({ check: true, pledge: true, release: false });
+        setMessage("Pledge landed. Open History to see it.");
       } else {
-        setMessage("Release is in History. Open History to see it.");
+        setDone({ check: true, pledge: true, release: true });
+        setMessage("Release landed. Open History to see it.");
       }
     } catch (reason) {
       setMessage(null);
@@ -255,11 +258,17 @@ export function LenderDesk() {
           const n = index + 2;
           const enabled = canRun(step.command);
           const lockedHint =
-            step.command === "pledge" && !done.check
-              ? "Check first."
-              : step.command === "release" && !done.pledge
-                ? "Pledge first."
-                : null;
+            step.command === "check" && done.check
+              ? "Already checked."
+              : step.command === "pledge" && !done.check
+                ? "Check first."
+                : step.command === "pledge" && done.pledge
+                  ? "Already pledged."
+                  : step.command === "release" && !done.pledge
+                    ? "Pledge first."
+                    : step.command === "release" && done.release
+                      ? "Already released."
+                      : null;
           return (
             <li
               className="grid gap-3 border-t border-[var(--landing-border)] pt-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start sm:gap-5"
@@ -269,7 +278,7 @@ export function LenderDesk() {
               <div>
                 <p className="text-sm font-medium">
                   {step.title}
-                  {step.first ? (
+                  {step.first && !done.check ? (
                     <span className="ml-2 font-normal text-[var(--landing-muted-fg)]">Press this first</span>
                   ) : null}
                 </p>

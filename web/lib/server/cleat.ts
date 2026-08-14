@@ -6,9 +6,7 @@ export const TEE_URL = process.env.EXT_PROXY_URL || "";
 export const DIRECT_API_KEY = process.env.DIRECT_API_KEY || "";
 export const CHAIN_URL =
   process.env.CHAIN_URL || "https://coston2-api.flare.network/ext/C/rpc";
-export const INSTRUCTION_SENDER = (
-  process.env.INSTRUCTION_SENDER || instructionSenderAddress
-).toLowerCase();
+export const INSTRUCTION_SENDER = instructionSenderAddress.toLowerCase();
 
 export const COMMAND_SELECTORS = {
   check: "0x9016f88b",

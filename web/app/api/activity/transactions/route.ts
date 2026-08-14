@@ -39,18 +39,17 @@ export async function POST(request: NextRequest) {
       if (transaction && receipt) break;
       await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
     }
-    const expectedInput =
-      `${COMMAND_SELECTORS[command]}${body.commitment.slice(2)}`.toLowerCase();
     if (!transaction || !receipt) {
       return NextResponse.json({ error: "Coston2 has not published this transaction yet" }, { status: 409 });
     }
+    const expectedInput =
+      `${COMMAND_SELECTORS[command]}${body.commitment.slice(2)}`.toLowerCase();
+    const to = transaction.to?.toLowerCase() ?? "";
+    const input = (transaction.input ?? "").toLowerCase();
     if (receipt.status !== "0x1") {
       return NextResponse.json({ error: "instruction reverted on Coston2" }, { status: 422 });
     }
-    if (
-      transaction.to?.toLowerCase() !== INSTRUCTION_SENDER ||
-      transaction.input?.toLowerCase() !== expectedInput
-    ) {
+    if (to !== INSTRUCTION_SENDER || input !== expectedInput) {
       return NextResponse.json(
         { error: "transaction does not match a successful Cleat instruction" },
         { status: 422 },
