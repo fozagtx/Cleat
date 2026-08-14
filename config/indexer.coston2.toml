@@ -1,8 +1,8 @@
 [indexer]
 mode = "fsp"
-history_epochs = 0
-rpc_concurrency = 6
-batch_size = 200
+history_epochs = 2
+rpc_concurrency = 12
+batch_size = 100
 log_range = 30
 new_block_check_millis = 1000
 confirmations = 1
@@ -18,7 +18,7 @@ file = ""
 console = true
 
 [chain]
-node_url = "https://rpc.ankr.com/flare_coston2"
+node_url = "https://coston2-api.flare.network/ext/C/rpc"
 api_key = ""
 chain_type = 1
 

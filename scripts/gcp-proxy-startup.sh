@@ -51,7 +51,7 @@ docker run -d --restart always \
   --name indexer \
   --network "${NETWORK}" \
   -p 127.0.0.1:8080:8080 \
-  "${REGISTRY}/${PROJECT_ID}/cleat/coston2-indexer:65a3b809-r9"
+  "${REGISTRY}/${PROJECT_ID}/cleat/coston2-indexer:65a3b809-r10"
 
 until curl -fsS http://127.0.0.1:8080/health >/dev/null; do
   sleep 10
@@ -68,7 +68,7 @@ docker run -d --restart always \
   -p 6663:6663 \
   -e "PROXY_PRIVATE_KEY=$(secret_value cleat-proxy-key)" \
   -e "DIRECT_API_KEY=$(secret_value cleat-direct-api-key)" \
-  "${REGISTRY}/${PROJECT_ID}/cleat/extension-proxy:v0.0.18-cleat2"
+  "${REGISTRY}/${PROJECT_ID}/cleat/extension-proxy:v0.0.18-cleat3"
 
 DOMAIN="$(metadata proxy-domain)"
 docker run -d --restart always \

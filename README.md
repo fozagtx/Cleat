@@ -9,7 +9,7 @@ Check whether one invoice is already pledged without sending the lender your who
 Cleat is a Flare Confidential Compute application for receivables financing. A borrower selects one invoice. A lender receives one narrow answer: already pledged, or clear to fund. Customer names, amounts, and the rest of the receivables book are not published on-chain.
 
 > [!IMPORTANT]
-> Cleat is under active development. The web app, server routes, contracts, and Go extension are implemented. The production TEE still requires external FTDC promotion before the complete Coston2 path can be presented as live.
+> Cleat is under active development. The web app, server routes, contracts, Go extension, and Coston2 Confidential Space TEE are live. FDC settlement release is not implemented.
 
 ## What is it?
 
@@ -85,7 +85,7 @@ Cleat proves registry-local pledge state. It does not prove that an invoice is r
 | Cleat Solidity instruction functions | Implemented and deployed to Coston2 |
 | Verification and pledge registries | Implemented and deployed to Coston2 |
 | FDC settlement release | Designed, not implemented |
-| GCP Confidential Space deployment | Running on AMD SEV; on-chain machine initialized, awaiting external FTDC promotion proof |
+| GCP Confidential Space deployment | Running on AMD SEV; FTDC-promoted to production/active on Coston2 |
 
 When `EXT_PROXY_URL` or `DIRECT_API_KEY` is absent, confidential delivery returns `503`. The application never seeds `eligible`, `ACTIVE`, or a fake transaction hash.
 
@@ -98,7 +98,9 @@ FCC workload image:
 
 Extension proxy: [`https://cleat.34.70.0.65.sslip.io`](https://cleat.34.70.0.65.sslip.io/info)
 
-TEE ID: `0x696e2Af4fA8Bc9CCB6017440A80861e338B91bD1` (initialized on Coston2; not yet promoted to active because the external FTDC availability proof has not been produced)
+Public provider URL: [`https://cleat-finance.vercel.app/api/fcc-proxy`](https://cleat-finance.vercel.app/api/fcc-proxy/info)
+
+TEE ID: [`0xEc5A7a69dAdBCD7d2D323619E25eB7f892f22463`](https://coston2-explorer.flare.network/address/0xEc5A7a69dAdBCD7d2D323619E25eB7f892f22463) (production/active, signing policy 5940)
 
 | Contract | Address |
 |---|---|

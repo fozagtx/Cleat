@@ -19,7 +19,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const repeats = 15
+const repeats = 90
 
 func TeeInfo(nodeURL string) (*types.SignedTeeInfoResponse, error) {
 	result, err := http.Get(nodeURL + "/info")
