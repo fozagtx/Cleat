@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./web/app/icon.svg" alt="Cleat logo" width="88" height="88">
+  <img src="./web/public/cleat-logo.png" alt="Cleat logo" width="88" height="88">
 </p>
 
 # Cleat
