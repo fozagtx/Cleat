@@ -94,11 +94,11 @@ When `EXT_PROXY_URL` or `DIRECT_API_KEY` is absent, confidential delivery return
 Extension ID: `0x00000000000000000000000000000000000000000000000000000000000102e7`
 
 FCC workload image:
-`us-central1-docker.pkg.dev/cleat-505513/cleat/extension-tee@sha256:c1e54c02a3b68fee45af016a89808c7156ac2e217869d4f4ead522039428b18d`
+`us-central1-docker.pkg.dev/cleat-505513/cleat/extension-tee@sha256:008c8c2dbf56f3bb27bc2efd3b77eb0e628ff898a3200ff095e5dbdf6f735e45`
 
 Extension proxy: [`https://cleat.34.70.0.65.sslip.io`](https://cleat.34.70.0.65.sslip.io/info)
 
-TEE ID: `0x2F6FFbdF37920b297E3b324548CcE9A30A2bC1ad` (initialized on Coston2; not yet promoted to active because the external FTDC availability proof has not been produced)
+TEE ID: `0x696e2Af4fA8Bc9CCB6017440A80861e338B91bD1` (initialized on Coston2; not yet promoted to active because the external FTDC availability proof has not been produced)
 
 | Contract | Address |
 |---|---|
