@@ -10,11 +10,11 @@ export function LandingHero() {
         <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-2 lg:gap-16">
           <div className="max-w-xl space-y-6 lg:max-w-none">
             <h1 className="text-4xl font-normal leading-[0.98] tracking-[-0.5px] text-balance sm:text-5xl lg:text-[3.75rem] xl:text-[4.25rem]">
-              Stop sending your whole customer list just to finance{" "}
-              <span className="text-[var(--landing-brand)]">one invoice</span>.
+              Finance one invoice without disclosing{" "}
+              <span className="text-[var(--landing-brand)]">the whole book</span>.
             </h1>
             <p className="max-w-lg text-base leading-8 text-[var(--landing-muted-fg)] sm:text-xl">
-              They check that invoice. They do not get the book.
+              Cleat selectively discloses one answer: already pledged, or clear to fund.
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <WalletReviewButton className={primaryBtn} />

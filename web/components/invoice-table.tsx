@@ -6,7 +6,7 @@ import { ghostBtn } from "@/components/landing/chrome";
 import { fetchInvoices, type Invoice } from "@/lib/api";
 import { formatDateUtc, formatFiatMinor } from "@/lib/format";
 
-export function InvoiceTable() {
+export function InvoiceTable({ refreshKey = 0 }: { refreshKey?: number }) {
   const [rows, setRows] = useState<Invoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +20,7 @@ export function InvoiceTable() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [refreshKey]);
 
   if (error) {
     return (

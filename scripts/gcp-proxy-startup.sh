@@ -24,11 +24,11 @@ access_token() {
 }
 
 secret_value() {
-  local token encoded
+  local secret_name="$1" token encoded
   token="$(access_token)"
   encoded="$(curl -fsS \
     -H "Authorization: Bearer ${token}" \
-    "https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/cleat-proxy-key/versions/latest:access" \
+    "https://secretmanager.googleapis.com/v1/projects/${PROJECT_ID}/secrets/${secret_name}/versions/latest:access" \
     | tr ',' '\n' | awk -F'"' '/"data":/ {print $4}')"
   printf '%s' "${encoded}" | tr '_-' '/+' | base64 -d
 }
@@ -49,7 +49,7 @@ docker run -d --restart always \
   --name indexer \
   --network "${NETWORK}" \
   -p 127.0.0.1:8080:8080 \
-  "${REGISTRY}/${PROJECT_ID}/cleat/coston2-indexer:65a3b809-r2"
+  "${REGISTRY}/${PROJECT_ID}/cleat/coston2-indexer:65a3b809-r9"
 
 until curl -fsS http://127.0.0.1:8080/health >/dev/null; do
   sleep 10
@@ -64,8 +64,9 @@ docker run -d --restart always \
   --name proxy \
   --network "${NETWORK}" \
   -p 6663:6663 \
-  -e "PROXY_PRIVATE_KEY=$(secret_value)" \
-  "${REGISTRY}/${PROJECT_ID}/cleat/extension-proxy:v0.0.18"
+  -e "PROXY_PRIVATE_KEY=$(secret_value cleat-proxy-key)" \
+  -e "DIRECT_API_KEY=$(secret_value cleat-direct-api-key)" \
+  "${REGISTRY}/${PROJECT_ID}/cleat/extension-proxy:v0.0.18-cleat2"
 
 DOMAIN="$(metadata proxy-domain)"
 docker run -d --restart always \

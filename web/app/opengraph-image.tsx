@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Cleat private invoice checks";
+export const alt = "Cleat confidential invoice checks";
 export const size = {
   height: 630,
   width: 1200,
@@ -70,7 +70,7 @@ export default function OpenGraphImage() {
                 textTransform: "uppercase",
               }}
             >
-              Private receivable checks
+              Selective disclosure for receivables
             </span>
             <div
               style={{

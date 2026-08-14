@@ -4,7 +4,7 @@ Council of 20. Time is not a reason to cut. Mock invoice data is allowed. Fake p
 
 **Track:** Flare Summer Signal — Confidential Compute Apps  
 **Product:** The lender gets `eligible = true|false`. Not the receivables book.  
-**Network:** Coston2 (114). Enclave is **Phala Cloud** (Intel TDX CVM). Not GCP Confidential Space. Laptop Docker is local iteration only.
+**Network:** Coston2 (114). Enclave is **GCP Confidential Space** on AMD SEV. Laptop Docker is local iteration only.
 
 ---
 
@@ -23,14 +23,13 @@ FCC = private uniqueness. FDC = public settlement event. FTSO = conversion quote
 Keep the official `fce-extension-scaffold` at repo root. Do not nest under `fce-extension/`. Do not delete official scripts.
 
 ```
-go/ python/ typescript/     TEE languages (LANGUAGE=)
+go/                         Cleat TEE implementation
 contracts/                  InstructionSender + product registries
 scripts/ tools/             official FCC lifecycle
-web/                        Next.js  (no language.env)
-backend/                   Fastify   (no language.env)
+web/                        Next.js UI + server API + Prisma
 ```
 
-`LANGUAGE=go`. One Cleat TEE image. Do not port CHECK/PLEDGE into Python/TS. Do not set `LANGUAGE=typescript` because the frontend is TypeScript.
+`LANGUAGE=go`. One Cleat TEE image and one Next.js product deployment.
 
 ---
 
@@ -98,7 +97,7 @@ Browser seals (X25519/ECIES + AES-256-GCM to TEE pubkey from /info)
   → TEE CHECK/PLEDGE
 ```
 
-Backend is a courier of opaque bytes. It does not decrypt.
+Next.js server routes are a courier of opaque bytes. They do not decrypt.
 
 ---
 
@@ -113,15 +112,15 @@ CHECK ticket binds to `commitment`. PLEDGE is a new instruction that re-checks t
 
 ---
 
-## Backend + DB (not skipped)
+## Server routes + DB
 
-Fastify + Prisma + PostgreSQL. Eight tables as specified. Application store, not trust.
+Next.js route handlers + Prisma + PostgreSQL. Eight tables as specified. Application store, not trust.
 
-Eligibility is never answered from Prisma. Seed INV-001 into `invoices`. Do **not** seed `eligible` or on-chain ACTIVE.
+Eligibility is never answered from Prisma. Do **not** seed invoices, `eligible`, or on-chain ACTIVE.
 
 Borrower GET returns the book. Lender GET returns commitment + protocol result + NOT DISCLOSED. Server-enforced.
 
-Postgres + Fastify attach via a **product compose overlay**. Official `docker-compose.yaml` stays redis + ext-proxy + extension-tee.
+Postgres attaches via a **product compose overlay** for local development. Official `docker-compose.yaml` stays redis + ext-proxy + extension-tee.
 
 ---
 
@@ -171,7 +170,7 @@ Not in the demo. Not on CHECK/PLEDGE/RELEASE payloads. Bind `msg.sender`, never 
 Seed the **business object** (INV-001, ACME, $100k, Lender A/B).  
 Never seed the **protocol verdict**.
 
-Always-on chip: Coston2 · Phala TDX · demo invoices · not a legal receivable.
+Always-on chip: Coston2 · GCP AMD SEV · demo invoices · not a legal receivable.
 
 ---
 
@@ -192,16 +191,16 @@ UI attack button is extra. It does not replace tests.
 
 ## Deploy
 
-Enclave: **Phala Cloud**. `npx phala deploy -n cleat -c phala-compose.yml -t tdx.medium --wait`. Intel TDX. Attest with `phala cvms attestation <cvm-id>`. Public CVM URL is `EXT_PROXY_URL`.
+Enclave: **GCP Confidential Space** on AMD SEV. The workload image is pinned by digest in VM metadata. The public HTTPS extension proxy is `EXT_PROXY_URL`.
 
-What runs inside the CVM: official `redis` + `ext-proxy` + Go `extension-tee`. Images must be pullable (no local `build:` on Phala). Compose overlay; do not delete `docker-compose.yaml`.
+The `cleat-proxy` VM runs MySQL, the self-hosted Coston2 indexer, Redis, `tee-proxy`, and Caddy. The `cleat-confidential` VM runs only the measured Go `extension-tee` workload.
 
 Coston2: `LOCAL_MODE=false`. InstructionSender / PledgeRegistry / FDC stay on Flare.
 
-Do **not** register `GCP_AMD_SEV` or `GCP_INTEL_TDX`. Phala quotes are not Google Confidential Space quotes. Flare `register-tee` still uses the scaffold path (`TEST_PLATFORM` / `MODE=1`) because FTDC only verifies GCP attestations. Hardware isolation is Phala TDX. Say both. Do not claim production GCP FCC.
+Production registration uses `MODE=0`, `SIMULATED_TEE=false`, and the measured `GCP_AMD_SEV` platform returned by `/info`. Never substitute simulated attestation values.
 
-Pitch: the book is decrypted only inside the Phala CVM. CHECK/PLEDGE bind on Coston2. Proof of the enclave is the Phala attestation, not a fake `GCP_AMD_SEV` string.
+Pitch: the book is decrypted only inside GCP Confidential Space. CHECK/PLEDGE bind on Coston2. The workload code hash and platform are measured and registered through FCC.
 
-Laptop compose is handler tests. Live demo is the Phala CVM.
+Laptop compose is for handler tests. The live deployment is GCP Confidential Space plus the dedicated proxy/indexer VM.
 
 FCC addresses from `config/coston2/deployed-addresses.json` until FCC is enshrined. Enshrined protocols from Contract Registry.

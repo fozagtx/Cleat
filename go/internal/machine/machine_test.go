@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	inv     = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	invB    = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	inv     = "0xa51b3a0d332331f538e09d16f67c2ef1cae1098f5451d2eb1b62e6b672684a96"
+	invB    = "0x376f373d88501a9bf96695a84b3f17c6f9ce2b7cbaf3b6e5e636b9e1bf802755"
 	alice   = "0x1111111111111111111111111111111111111111"
 	bob     = "0x2222222222222222222222222222222222222222"
 	mallory = "0x3333333333333333333333333333333333333333"
@@ -17,15 +17,71 @@ func storeAt(ts int64) *Store {
 	s := NewStore()
 	s.Now = func() int64 { return ts }
 	s.Protocol = proto
+	sealTestInvoice(s, false)
+	sealTestInvoice(s, true)
 	s.CompleteRehydration()
 	return s
 }
 
+func sealTestInvoice(s *Store, second bool) string {
+	request := SealRequest{
+		InvoiceNumber: "INV-001",
+		DebtorName:    "ACME",
+		Currency:      "USD",
+		AmountMinor:   "10000000",
+		DueDate:       1788134400,
+		Nonce:         "0x1111111111111111111111111111111111111111111111111111111111111111",
+		Commitment:    inv,
+	}
+	if second {
+		request = SealRequest{
+			InvoiceNumber: "INV-002",
+			DebtorName:    "BETA",
+			Currency:      "USD",
+			AmountMinor:   "9000000",
+			DueDate:       1788220800,
+			Nonce:         "0x2222222222222222222222222222222222222222222222222222222222222222",
+			Commitment:    invB,
+		}
+	}
+	if result := s.Seal(request); !result.OK {
+		panic("test invoice seal failed: " + result.Detail)
+	}
+	return request.Commitment
+}
+
 func TestCheck_UnrehydratedStoreFailsClosed(t *testing.T) {
 	s := NewStore()
+	sealTestInvoice(s, false)
 	got := s.Check(CheckRequest{InvoiceCommitment: inv, RequestID: "restart-check"})
 	if got.Eligible || got.Reason != CheckInvalid || got.Detail != DetailStateUnavailable {
 		t.Fatalf("empty restart must not mean UNPLEDGED: %+v", got)
+	}
+}
+
+func TestLoadPledge_RehydratesAuthoritativeState(t *testing.T) {
+	s := NewStore()
+	sealTestInvoice(s, false)
+	err := s.LoadPledge(PledgeRecord{
+		Commitment: inv,
+		Financier:  alice,
+		Status:     PledgeActive,
+		UpdatedAt:  900,
+	})
+	if err != nil {
+		t.Fatalf("load pledge: %v", err)
+	}
+	s.CompleteRehydration()
+
+	got := s.Check(CheckRequest{InvoiceCommitment: inv})
+	if got.Eligible || got.Reason != CheckAlreadyPledged || got.Status != PledgeActive {
+		t.Fatalf("rehydrated active pledge: %+v", got)
+	}
+	if !s.IsRehydrated() {
+		t.Fatal("store should report completed rehydration")
+	}
+	if err := s.LoadPledge(PledgeRecord{Commitment: invB, Status: PledgeReleased}); err == nil {
+		t.Fatal("loading after completion must fail")
 	}
 }
 
@@ -45,6 +101,30 @@ func TestCheck_ActiveIsAlreadyPledged(t *testing.T) {
 	got := s.Check(CheckRequest{InvoiceCommitment: inv, Caller: bob})
 	if got.Eligible || got.Reason != CheckAlreadyPledged {
 		t.Fatalf("CHECK active: %+v", got)
+	}
+}
+
+func TestCheck_AlternateNonceCannotHideActiveInvoice(t *testing.T) {
+	s := storeAt(1000)
+	if result := s.Pledge(PledgeRequest{InvoiceCommitment: inv, Financier: alice, Caller: alice}); !result.OK {
+		t.Fatalf("pledge: %+v", result)
+	}
+	alternate := SealRequest{
+		InvoiceNumber: "INV-001",
+		DebtorName:    "ACME",
+		Currency:      "USD",
+		AmountMinor:   "10000000",
+		DueDate:       1788134400,
+		Nonce:         "0x3333333333333333333333333333333333333333333333333333333333333333",
+		Commitment:    "0x530aec2ba268d3916e73efd40cbc4e6889b7a72708e058179e53cae9d8f318cd",
+	}
+	if result := s.Seal(alternate); !result.OK {
+		t.Fatalf("seal alternate: %+v", result)
+	}
+
+	got := s.Check(CheckRequest{InvoiceCommitment: alternate.Commitment})
+	if got.Eligible || got.Reason != CheckAlreadyPledged {
+		t.Fatalf("alternate nonce bypassed active invoice: %+v", got)
 	}
 }
 

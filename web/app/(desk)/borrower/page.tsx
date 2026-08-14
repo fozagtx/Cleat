@@ -1,10 +1,10 @@
 import { DeskFrame } from "@/components/desk-frame";
-import { InvoiceTable } from "@/components/invoice-table";
+import { BorrowerDesk } from "@/components/borrower-desk";
 
 export default function BorrowerPage() {
   return (
     <DeskFrame lede="Choose the receivable you want funded." title="Invoices">
-      <InvoiceTable />
+      <BorrowerDesk />
     </DeskFrame>
   );
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flare-foundation/go-flare-common/pkg/tee/instruction"
-	"github.com/flare-foundation/go-flare-common/pkg/tee/structs"
 	teetypes "github.com/flare-foundation/tee-node/pkg/types"
 	teeutils "github.com/flare-foundation/tee-node/pkg/utils"
 
@@ -27,11 +26,8 @@ type Extension struct {
 	mu     sync.RWMutex
 	Server *http.Server
 
-	greetingCount int
-	lastGreeting  string
-	farewellCount int
-	lastFarewell  string
-	cleat         *machine.Store
+	cleat    *machine.Store
+	signPort int
 }
 
 type cleatMessage struct {
@@ -66,7 +62,8 @@ var (
 func New(extensionPort, signPort int) *Extension {
 	// Cleat starts fail-closed. A chain rehydration integration must call
 	// CompleteRehydration only after loading the authoritative registry snapshot.
-	e := &Extension{cleat: machine.NewStore()}
+	e := &Extension{cleat: machine.NewStore(), signPort: signPort}
+	e.rehydrateFromChain()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /state", e.stateHandler)
@@ -78,17 +75,12 @@ func New(extensionPort, signPort int) *Extension {
 
 // stateHandler() structure is boilerplate but update the State field mapping to match your Extension fields.
 func (e *Extension) stateHandler(w http.ResponseWriter, r *http.Request) {
-	e.mu.RLock()
 	stateResponse := types.StateResponse{
 		StateVersion: teeutils.ToHash(config.Version),
 		State: types.State{
-			GreetingCount: e.greetingCount,
-			LastGreeting:  e.lastGreeting,
-			FarewellCount: e.farewellCount,
-			LastFarewell:  e.lastFarewell,
+			Rehydrated: e.cleatStore().IsRehydrated(),
 		},
 	}
-	e.mu.RUnlock()
 
 	err := json.NewEncoder(w).Encode(stateResponse)
 	if err != nil {
@@ -103,27 +95,39 @@ func (e *Extension) processAction(action teetypes.Action) (int, []byte) {
 		return http.StatusBadRequest, []byte(fmt.Sprintf("decoding fixed data: %v", err))
 	}
 
-	switch {
-	case dataFixed.OPType == teeutils.ToHash(config.OPTypeCleat):
+	if dataFixed.OPType == teeutils.ToHash(config.OPTypeCleat) {
 		return e.processCleat(action, dataFixed)
-
-	case dataFixed.OPType == teeutils.ToHash(config.OPTypeGreeting):
-		return e.processGreeting(action, dataFixed)
-
-	default:
-		return http.StatusNotImplemented, []byte(fmt.Sprintf(
-			"unsupported op type: received %s, expected one of [%s (%s), %s (%s)]",
-			dataFixed.OPType.Hex(),
-			teeutils.ToHash(config.OPTypeCleat).Hex(), config.OPTypeCleat,
-			teeutils.ToHash(config.OPTypeGreeting).Hex(), config.OPTypeGreeting,
-		))
 	}
+	return http.StatusNotImplemented, []byte(fmt.Sprintf(
+		"unsupported op type: received %s, expected %s (%s)",
+		dataFixed.OPType.Hex(),
+		teeutils.ToHash(config.OPTypeCleat).Hex(), config.OPTypeCleat,
+	))
 }
 
 // processCleat routes FCC Cleat instructions into the dual state machine.
 func (e *Extension) processCleat(action teetypes.Action, df *instruction.DataFixed) (int, []byte) {
 	var result teetypes.ActionResult
 	switch {
+	case df.OPCommand == teeutils.ToHash(config.OPCommandSeal):
+		plaintext, err := e.decrypt(df.OriginalMessage)
+		if err != nil {
+			result = buildResult(action, df, nil, 0, fmt.Errorf("decrypting SEAL request: %w", err))
+			break
+		}
+		var req machine.SealRequest
+		if err := decodeStrict(plaintext, &req); err != nil {
+			result = buildResult(action, df, nil, 0, fmt.Errorf("decoding SEAL request: %w", err))
+			break
+		}
+		outcome := e.cleatStore().Seal(req)
+		if !outcome.OK {
+			result = buildResult(action, df, nil, 0, fmt.Errorf("%s", outcome.Detail))
+			break
+		}
+		data, _ := json.Marshal(outcome)
+		result = buildResult(action, df, data, 1, nil)
+
 	case df.OPCommand == teeutils.ToHash(config.OPCommandCheck):
 		var req machine.CheckRequest
 		wire, abiEncoded, err := decodeCleatMessage(df.OriginalMessage)
@@ -219,8 +223,9 @@ func (e *Extension) processCleat(action teetypes.Action, df *instruction.DataFix
 
 	default:
 		return http.StatusNotImplemented, []byte(fmt.Sprintf(
-			"unsupported op command: received %s, expected one of [%s, %s, %s, %s]",
+			"unsupported op command: received %s, expected one of [%s, %s, %s, %s, %s]",
 			df.OPCommand.Hex(),
+			config.OPCommandSeal,
 			config.OPCommandCheck,
 			config.OPCommandPledge,
 			config.OPCommandRelease,
@@ -381,85 +386,4 @@ func mustABIType(kind string) abi.Type {
 		panic(err)
 	}
 	return value
-}
-
-// processGreeting routes GREETING instructions by OPCommand.
-func (e *Extension) processGreeting(action teetypes.Action, df *instruction.DataFixed) (int, []byte) {
-	switch {
-	case df.OPCommand == teeutils.ToHash(config.OPCommandSayHello):
-		ar := e.processSayHello(action, df)
-		b, _ := json.Marshal(ar)
-		return http.StatusOK, b
-
-	case df.OPCommand == teeutils.ToHash(config.OPCommandSayGoodbye):
-		ar := e.processSayGoodbye(action, df)
-		b, _ := json.Marshal(ar)
-		return http.StatusOK, b
-
-	default:
-		return http.StatusNotImplemented, []byte(fmt.Sprintf(
-			"unsupported op command: received %s, expected one of [%s (%s), %s (%s)]",
-			df.OPCommand.Hex(),
-			teeutils.ToHash(config.OPCommandSayHello).Hex(), config.OPCommandSayHello,
-			teeutils.ToHash(config.OPCommandSayGoodbye).Hex(), config.OPCommandSayGoodbye,
-		))
-	}
-}
-
-// processSayHello handles SAY_HELLO instructions: returns a greeting and tracks count.
-func (e *Extension) processSayHello(action teetypes.Action, df *instruction.DataFixed) teetypes.ActionResult {
-	var req types.SayHelloRequest
-	dec := json.NewDecoder(bytes.NewReader(df.OriginalMessage))
-	dec.DisallowUnknownFields()
-	err := dec.Decode(&req)
-	if err != nil {
-		return buildResult(action, df, nil, 0, fmt.Errorf("decoding request: %w", err))
-	}
-
-	if req.Name == "" {
-		return buildResult(action, df, nil, 0, fmt.Errorf("name must not be empty"))
-	}
-
-	e.mu.Lock()
-	e.greetingCount++
-	greetingNumber := e.greetingCount
-	greeting := fmt.Sprintf("Hello, %s! Welcome to Flare Confidential Compute.", req.Name)
-	e.lastGreeting = greeting
-	e.mu.Unlock()
-
-	resp := types.SayHelloResponse{
-		Greeting:       greeting,
-		GreetingNumber: greetingNumber,
-	}
-	data, _ := json.Marshal(resp)
-
-	return buildResult(action, df, data, 1, nil)
-}
-
-// processSayGoodbye handles SAY_GOODBYE instructions: returns a farewell and tracks count.
-func (e *Extension) processSayGoodbye(action teetypes.Action, df *instruction.DataFixed) teetypes.ActionResult {
-	var req types.SayGoodbyeRequest
-	err := structs.DecodeTo(types.SayGoodbyeMessageArg, df.OriginalMessage, &req)
-	if err != nil {
-		return buildResult(action, df, nil, 0, fmt.Errorf("decoding request: %w", err))
-	}
-
-	if req.Name == "" {
-		return buildResult(action, df, nil, 0, fmt.Errorf("name must not be empty"))
-	}
-
-	e.mu.Lock()
-	e.farewellCount++
-	farewellNumber := e.farewellCount
-	farewell := fmt.Sprintf("Goodbye, %s! Reason: %s", req.Name, req.Reason)
-	e.lastFarewell = farewell
-	e.mu.Unlock()
-
-	resp := types.SayGoodbyeResponse{
-		Farewell:       farewell,
-		FarewellNumber: farewellNumber,
-	}
-	data, _ := json.Marshal(resp)
-
-	return buildResult(action, df, data, 1, nil)
 }

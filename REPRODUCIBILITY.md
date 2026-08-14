@@ -3,31 +3,11 @@
 The image's code hash is what gets registered on-chain, so build determinism is
 a security property rather than a nicety.
 
-## Reproducibility is not equal across languages
+## Guarantee
 
-Be precise about what is actually guaranteed. Overclaiming here is worse than
-underclaiming, because the on-chain registration is what depends on it.
-
-| Language | Guarantee | Why |
-| --- | --- | --- |
-| **Go** | **Bit-for-bit across machines** | Static `CGO_ENABLED=0` binary with `-trimpath -buildid=`, on a digest-pinned distroless base. Nothing host-specific survives. |
-| **Python** | **Same-machine only** | pip installs prebuilt manylinux wheels whose contents are fixed, but `.dist-info` metadata and installation layout can vary with the pip/setuptools version present in the base image. |
-| **TypeScript** | **Same-machine only** | `npm ci` reproduces the dependency *tree* from `package-lock.json`, but `node_modules` layout, hoisting and file ordering vary across npm versions. |
-
-For Python and TypeScript, "same-machine" means: rebuilding on the same host
-with the same Docker/pip/npm versions and the same `SOURCE_DATE_EPOCH` yields
-the same digest. It does **not** mean an auditor on different hardware can
-independently reproduce your hash.
-
-If independent third-party verification of the code hash matters for your
-deployment, use the Go path. To tighten Python/TypeScript, pin the runtime base
-images by `sha256` digest (both currently use tag form, marked with a `NOTE:` in
-their Dockerfiles) — this is required before cutting a testnet release.
-
-All three share the same tee-node build: `docker/node-base.Dockerfile` compiles
-it once from a pinned ref on the same digest-pinned golang image, so the
-`server` binary bytes are identical across language images.
-`scripts/check-versions.sh` fails the build if that pin drifts from `go/go.mod`.
+The Go workload is bit-for-bit reproducible across machines: it is a static
+`CGO_ENABLED=0` binary built with `-trimpath -buildid=` on a digest-pinned
+distroless base. Nothing host-specific survives.
 
 ## How it works
 
@@ -56,18 +36,15 @@ resolved from `LANGUAGE`). `go/go.mod` pins
 the network (verified against `go.sum`), so the build needs only this repo's own
 sources — no sibling `tee-node/` checkout.
 
-Each language ships a `<lang>/Dockerfile.dockerignore`. BuildKit prefers those
-over the root `.dockerignore`, and each one excludes the *other* language
-directories along with `node_modules/`, `__pycache__/` and `.venv/`. This is not
-only a build-speed concern: anything reachable in the context can perturb layer
-hashes, so a stray local `node_modules` would otherwise undermine determinism.
+`go/Dockerfile.dockerignore` excludes local dependencies and generated output.
+This is not only a build-speed concern: anything reachable in the context can
+perturb layer hashes.
 
 > **Developing `tee-node`/`tee-proxy` locally?** Run
 > `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`, which builds from on-disk
 > sibling checkouts via `go/Dockerfile.siblings` (build context `tee/`). That
 > path is Go-only and is for local iteration — it uses whatever is checked out
-> and is **not** reproducible. `start-services.sh` rejects it for other
-> languages, which build tee-node from the pinned ref instead.
+> and is **not** reproducible.
 
 ## Verifying a remote image
 
@@ -85,22 +62,22 @@ Clone the extension repository (self-contained — no sibling `tee-node/` needed
 the pinned module is fetched from the network at build time):
 
 ```sh
-git clone https://github.com/flare-foundation/extension-examples.git
+git clone https://github.com/fozagtx/Cleat.git
 ```
 
 Checkout the tag you want to verify, build locally, and compare the image ID
-against the registry image. Run from `extension-examples/extension-scaffold/`:
+against the registry image. Run from the repository root:
 
 ```sh
 TAG=$(git describe --tags --abbrev=0)
 git checkout "$TAG"
 
-docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) --output "type=docker,rewrite-timestamp=true" -t local/extension-scaffold:verify --load -f Dockerfile .
+docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) --output "type=docker,rewrite-timestamp=true" -t local/cleat:verify --load -f go/Dockerfile .
 
-docker pull --platform linux/amd64 ghcr.io/flare-foundation/extension-scaffold:"$TAG"
+docker pull --platform linux/amd64 us-central1-docker.pkg.dev/cleat-505513/cleat/extension-tee:"$TAG"
 
-docker inspect --format='{{.Id}}' local/extension-scaffold:verify
-docker inspect --format='{{.Id}}' ghcr.io/flare-foundation/extension-scaffold:"$TAG"
+docker inspect --format='{{.Id}}' local/cleat:verify
+docker inspect --format='{{.Id}}' us-central1-docker.pkg.dev/cleat-505513/cleat/extension-tee:"$TAG"
 ```
 
 Both IDs should be identical.

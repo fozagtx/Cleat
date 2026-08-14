@@ -1,125 +1,235 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DeskCard } from "@/components/desk-card";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { DeskCard, DeskSkeleton } from "@/components/desk-card";
 import { primaryBtn, secondaryBtn } from "@/components/landing/chrome";
-import { fetchInvoices, runProtocol, type Invoice } from "@/lib/api";
-import { formatDateUtc, formatFiatMinor } from "@/lib/format";
+import {
+  fetchLenderInvoices,
+  recordProtocolTransaction,
+  type LenderInvoice,
+} from "@/lib/api";
+import {
+  instructionFee,
+  instructionSenderAbi,
+  instructionSenderAddress,
+} from "@/lib/contracts";
+import { explorerTx, shortHash } from "@/lib/format";
+import { coston2 } from "@/lib/wagmi";
+
+const functionNames = {
+  check: "sendCheck",
+  pledge: "sendPledge",
+  release: "sendRelease",
+} as const;
+
+type Command = keyof typeof functionNames;
+
+function transactionError(error: unknown) {
+  if (!(error instanceof Error)) return "Transaction failed.";
+  const short =
+    "shortMessage" in error && typeof error.shortMessage === "string"
+      ? error.shortMessage
+      : error.message.split("\n")[0];
+  if (short.toLowerCase().includes("rejected")) return "Request cancelled.";
+  if (short.toLowerCase().includes("execution reverted")) {
+    return "The FCC machine is not active yet. Try again after TEE promotion.";
+  }
+  return short;
+}
 
 export function LenderDesk() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [selected, setSelected] = useState<string>("");
-  const [busy, setBusy] = useState<string | null>(null);
+  const [invoices, setInvoices] = useState<LenderInvoice[] | null>(null);
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState<Command | null>(null);
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { address, chainId, isConnected } = useAccount();
+  const publicClient = usePublicClient({ chainId: coston2.id });
+  const { writeContractAsync } = useWriteContract();
 
-  useEffect(() => {
-    fetchInvoices()
+  function load() {
+    setError(null);
+    setInvoices(null);
+    fetchLenderInvoices()
       .then((rows) => {
         setInvoices(rows);
-        if (rows[0]) setSelected(rows[0].id);
+        setSelected((current) => current || rows[0]?.id || "");
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"));
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : "Could not load invoice handles"),
+      );
+  }
+
+  useEffect(() => {
+    load();
   }, []);
 
-  const invoice = invoices.find((row) => row.id === selected) ?? invoices[0];
+  const invoice = invoices?.find((row) => row.id === selected) ?? invoices?.[0];
+  const walletReady = isConnected && chainId === coston2.id && Boolean(address);
 
-  async function run(command: string) {
-    if (!invoice) return;
+  async function run(command: Command) {
+    if (!invoice || !walletReady || !publicClient) return;
     setBusy(command);
-    setMessage(null);
+    setMessage("Confirm the instruction in your wallet.");
     setError(null);
+    setTxHash(null);
     try {
-      const res = await runProtocol(command, invoice.id);
-      setMessage(res.error ?? `Asked the network to ${command}.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      const hash = await writeContractAsync({
+        abi: instructionSenderAbi,
+        address: instructionSenderAddress,
+        args: [invoice.commitment],
+        chainId: coston2.id,
+        functionName: functionNames[command],
+        value: instructionFee,
+      });
+      setTxHash(hash);
+      setMessage("Submitted. Waiting for Coston2 confirmation.");
+      await publicClient.waitForTransactionReceipt({ hash });
+      await recordProtocolTransaction(command, invoice.commitment, hash);
+      setMessage("Confirmed on Coston2. FCC will publish the confidential result.");
+    } catch (reason) {
+      setMessage(null);
+      setError(transactionError(reason));
     } finally {
       setBusy(null);
     }
   }
 
+  if (!invoices && !error) {
+    return <DeskSkeleton />;
+  }
+
+  if (error && !invoices) {
+    return (
+      <DeskCard
+        description={error}
+        footer={
+          <button className={secondaryBtn} onClick={load} type="button">
+            Try again
+          </button>
+        }
+        title="Could not load invoice handles"
+      />
+    );
+  }
+
+  if (!invoices?.length) {
+    return (
+      <DeskCard
+        description="A borrower must create a confidential commitment before a lender can review it."
+        title="No invoice handles yet"
+      />
+    );
+  }
+
   return (
     <DeskCard
-      description="Choose one invoice, check it, then pledge it."
+      description="Choose a sealed invoice handle, then submit a live Coston2 instruction."
       footer={
         <>
-          <button className={primaryBtn} disabled={!invoice || Boolean(busy)} onClick={() => run("check")} type="button">
-            {busy === "check" ? "Checking…" : "Check this invoice"}
+          <button
+            aria-busy={busy === "check"}
+            className={primaryBtn}
+            disabled={!invoice || !walletReady || Boolean(busy)}
+            onClick={() => run("check")}
+            type="button"
+          >
+            {busy === "check" ? "Submitting…" : "Check commitment"}
           </button>
           <button
+            aria-busy={busy === "pledge"}
             className={secondaryBtn}
-            disabled={!invoice || Boolean(busy)}
+            disabled={!invoice || !walletReady || Boolean(busy)}
             onClick={() => run("pledge")}
             type="button"
           >
-            {busy === "pledge" ? "Pledging…" : "Pledge it"}
+            {busy === "pledge" ? "Submitting…" : "Pledge commitment"}
+          </button>
+          <button
+            aria-busy={busy === "release"}
+            className={secondaryBtn}
+            disabled={!invoice || !walletReady || Boolean(busy)}
+            onClick={() => run("release")}
+            type="button"
+          >
+            {busy === "release" ? "Submitting…" : "Release pledge"}
           </button>
         </>
       }
-      title="Invoice review"
+      title="Confidential review"
     >
-      {!invoice ? (
-        <p className="text-sm text-[var(--landing-muted-fg)]">No invoice loaded.</p>
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-          <div>
-            {invoices.length > 1 ? (
-              <label className="mb-5 block">
-                <span className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">Invoice</span>
-                <select
-                  className="desk-select mt-2"
-                  onChange={(event) => {
-                    setSelected(event.target.value);
-                    setMessage(null);
-                    setError(null);
-                  }}
-                  value={selected}
-                >
-                  {invoices.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {row.invoiceNumber} · {row.debtorName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-            <dl className="space-y-3 text-sm">
-              <div className="flex justify-between gap-4 border-b border-[var(--landing-border)] pb-3">
-                <dt className="text-[var(--landing-muted-fg)]">Invoice</dt>
-                <dd className="landing-mono tabular-nums">{invoice.invoiceNumber}</dd>
-              </div>
-              <div className="flex justify-between gap-4 border-b border-[var(--landing-border)] pb-3">
-                <dt className="text-[var(--landing-muted-fg)]">Customer</dt>
-                <dd>{invoice.debtorName}</dd>
-              </div>
-              <div className="flex justify-between gap-4 border-b border-[var(--landing-border)] pb-3">
-                <dt className="text-[var(--landing-muted-fg)]">Due</dt>
-                <dd className="landing-mono tabular-nums">{formatDateUtc(invoice.dueDate)}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-[var(--landing-muted-fg)]">Face</dt>
-                <dd className="landing-mono tabular-nums">{formatFiatMinor(invoice.amountMinor, invoice.currency)}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div
-            aria-live="polite"
-            className="flex min-h-48 flex-col justify-between rounded-2xl border border-[var(--landing-border)] bg-[var(--landing-bg)] p-5"
-          >
-            <p className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">Answer</p>
-            <div className="mt-8">
-              {message ? (
-                <p className="text-xl font-medium tracking-[-0.5px]">{message}</p>
-              ) : (
-                <p className="text-xl font-medium tracking-[-0.5px] text-[var(--landing-muted-fg)]">Not checked yet</p>
-              )}
-              {error ? <p className="mt-3 text-sm text-[var(--landing-danger)]">{error}</p> : null}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
+        <div>
+          <label className="mb-5 block" htmlFor="lender-invoice">
+            <span className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">
+              Sealed invoice
+            </span>
+            <select
+              className="desk-select mt-2"
+              id="lender-invoice"
+              onChange={(event) => {
+                setSelected(event.target.value);
+                setMessage(null);
+                setError(null);
+                setTxHash(null);
+              }}
+              value={selected}
+            >
+              {invoices.map((row, index) => (
+                <option key={row.id} value={row.id}>
+                  Invoice handle {index + 1} · {shortHash(row.commitment)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between gap-4 border-b border-[var(--landing-border)] pb-3">
+              <dt className="text-[var(--landing-muted-fg)]">Commitment</dt>
+              <dd className="landing-mono tabular-nums">{shortHash(invoice?.commitment ?? null)}</dd>
             </div>
+            {["Invoice", "Customer", "Face value", "Due date"].map((field) => (
+              <div
+                className="flex justify-between gap-4 border-b border-[var(--landing-border)] pb-3 last:border-0"
+                key={field}
+              >
+                <dt className="text-[var(--landing-muted-fg)]">{field}</dt>
+                <dd>Not disclosed</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <div
+          aria-live="polite"
+          className="flex min-h-48 flex-col justify-between rounded-2xl border border-[var(--landing-border)] bg-[var(--landing-bg)] p-5"
+        >
+          <p className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">Network status</p>
+          <div className="mt-8">
+            {!isConnected ? (
+              <p className="text-xl font-medium tracking-[-0.5px]">Connect your wallet to continue.</p>
+            ) : chainId !== coston2.id ? (
+              <p className="text-xl font-medium tracking-[-0.5px]">Switch your wallet to Coston2.</p>
+            ) : (
+              <p className="text-xl font-medium tracking-[-0.5px]">
+                {message ?? "Ready for a live instruction."}
+              </p>
+            )}
+            {error ? <p className="mt-3 text-sm text-[var(--landing-danger)]">{error}</p> : null}
+            {txHash ? (
+              <a
+                className="desk-link landing-mono mt-4 inline-flex min-h-10 items-center text-sm"
+                href={explorerTx(txHash)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                View {shortHash(txHash)}
+              </a>
+            ) : null}
           </div>
         </div>
-      )}
+      </div>
     </DeskCard>
   );
 }

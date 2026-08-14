@@ -7,8 +7,7 @@
 # this script.
 #
 # These are the implementation's own tests. For cross-language wire-format
-# conformance, use ./scripts/test-conformance.sh. For the on-chain end-to-end
-# test, use ./scripts/test.sh.
+# For the on-chain end-to-end test, use ./scripts/test.sh.
 #
 # Usage:
 #   ./scripts/test-unit.sh              # the LANGUAGE from .env

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./web/app/icon.svg" alt="Cleat logo" width="88" height="88">
+</p>
+
 # Cleat
 
 Check whether one invoice is already pledged without sending the lender your whole customer list.
@@ -5,25 +9,23 @@ Check whether one invoice is already pledged without sending the lender your who
 Cleat is a Flare Confidential Compute application for receivables financing. A borrower selects one invoice. A lender receives one narrow answer: already pledged, or clear to fund. Customer names, amounts, and the rest of the receivables book are not published on-chain.
 
 > [!IMPORTANT]
-> Cleat is under active development. The web app and local API run today. The Cleat state machine exists and has Go tests, but it is not yet wired into the FCC extension or Solidity instruction path. Protocol actions return an explicit error instead of a fabricated verdict.
+> Cleat is under active development. The web app, server routes, contracts, and Go extension are implemented. The production TEE still requires external FTDC promotion before the complete Coston2 path can be presented as live.
 
 ## What is it?
 
-Cleat has six parts:
+Cleat has five parts:
 
-1. **Landing and desk:** A Next.js application with borrower invoices, lender review, and activity routes.
+1. **Next.js application:** Landing, borrower, lender, activity, and server-only API routes in one deployment.
 
-2. **Application API:** A Fastify service that reads persisted invoices and records attempted protocol activity. It never decides eligibility.
+2. **Confidential state machine:** A Go package implementing `CHECK`, `PLEDGE`, `RELEASE`, and `STATUS` over pledge and financing state.
 
-3. **Confidential state machine:** A Go package implementing `CHECK`, `PLEDGE`, `RELEASE`, and `STATUS` over pledge and financing state.
+3. **Flare Confidential Compute extension:** The official FCC scaffold, configured to use Go. This is the private execution boundary.
 
-4. **Flare Confidential Compute extension:** The official FCC scaffold, configured to use Go. This is the private execution boundary.
+4. **Coston2 contracts:** The deployed instruction sender, verification gateway, pledge registry, and financing registry.
 
-5. **Coston2 contracts:** The deployed instruction sender, verification gateway, pledge registry, and financing registry.
+5. **GCP Confidential Space deployment:** A production SEV workload connected to a self-hosted Coston2 indexer and extension proxy.
 
-6. **GCP Confidential Space deployment:** A production SEV workload connected to a self-hosted Coston2 indexer and extension proxy.
-
-The TEE and on-chain registry are the trust path. Fastify and PostgreSQL are application infrastructure, not the source of an eligibility answer.
+The TEE and on-chain registry are the trust path. Next.js server routes and PostgreSQL are application infrastructure, not the source of an eligibility answer.
 
 ## How it works
 
@@ -74,9 +76,9 @@ Cleat proves registry-local pledge state. It does not prove that an invoice is r
 | Landing page and responsive desk | Working |
 | MetaMask connection with wagmi and viem | Working |
 | Borrower invoice list | Working when invoices have been ingested |
-| Lender check and pledge UI | Working UI; protocol call is not wired |
-| Activity history | Working for API attempts |
-| Fastify API | Working with Prisma and PostgreSQL |
+| Lender check and pledge UI | Submits wallet transactions directly to Coston2 |
+| Activity history | Records transactions only after Coston2 verification |
+| Next.js server API | Working with Prisma and PostgreSQL in the web deployment |
 | Prisma schema and Neon database | Working; not protocol authority |
 | Go pledge and financing state machine | Implemented and tested |
 | FCC extension routing | Cleat commands implemented and tested |
@@ -85,7 +87,7 @@ Cleat proves registry-local pledge state. It does not prove that an invoice is r
 | FDC settlement release | Designed, not implemented |
 | GCP Confidential Space deployment | Running on AMD SEV; on-chain machine initialized, awaiting external FTDC promotion proof |
 
-When `EXT_PROXY_URL` is absent, the API returns `503`. Until wallet submission is wired, protocol requests return `409 CLIENT_SIGNATURE_REQUIRED`. The API never seeds `eligible`, `ACTIVE`, or a fake transaction hash.
+When `EXT_PROXY_URL` or `DIRECT_API_KEY` is absent, confidential delivery returns `503`. The application never seeds `eligible`, `ACTIVE`, or a fake transaction hash.
 
 ### Coston2 deployment
 
@@ -118,27 +120,14 @@ For the FCC stack:
 - Docker Desktop
 - Foundry
 - `jq` and `curl`
+- Google Cloud CLI
 - A funded Coston2 deployment wallet
-
-For a Phala deployment:
-
-- A Phala Cloud account
-- Phala CLI authentication
-- Publicly pullable proxy and extension images
 
 ## Quick start
 
 ### Run the local product
 
-Install and start the API:
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-In another terminal, install and start the web app:
+Install and start the application:
 
 ```bash
 cd web
@@ -146,25 +135,13 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The web app calls the API at `http://localhost:3001` by default.
+Open [http://localhost:3000](http://localhost:3000). The UI and `/api/*` routes run in the same Next.js process.
 
 Check API health:
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3000/api/health
 ```
-
-### Run only the frontend
-
-The landing page works without the API:
-
-```bash
-cd web
-npm install
-npm run dev
-```
-
-Invoices, Review, and History require the API.
 
 ### Prepare FCC configuration
 
@@ -181,33 +158,32 @@ ADDRESSES_FILE=./config/coston2/deployed-addresses.json
 LOCAL_MODE=false
 SIMULATED_TEE=false
 MODE=0
+REHYDRATION_ENABLED=true
+PLEDGE_REGISTRY_ADDRESS=0x4D2B2C08D7c20fE693742B0b1Cfa654eC8C8584f
+REHYDRATION_FROM_BLOCK=34054987
 INITIAL_OWNER=0x...
 DEPLOYMENT_PRIVATE_KEY=...
 EXT_PROXY_URL=https://...
 ```
 
 > [!WARNING]
-> Never commit `.env`, deployment keys, proxy keys, database credentials, or Phala credentials. Replace all sample and placeholder values before using a public network.
+> Never commit `.env`, deployment keys, proxy keys, or database credentials. Replace all sample and placeholder values before using a public network.
 
-The contracts, proxy, and Confidential Space workload are deployed on Coston2. Do not present the protocol as live until Flare's external FTDC availability proof promotes the initialized TEE, and chain rehydration plus wallet submission are configured.
+The contracts, proxy, and Confidential Space workload are deployed on Coston2. Do not present the protocol as live until Flare's external FTDC availability proof promotes the initialized TEE and the wallet submission path is verified end to end.
 
 ## Configuration
 
-### Web
+### Next.js server routes
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Fastify API origin |
-
-### Backend
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `PORT` | `3001` | Fastify port |
 | `EXT_PROXY_URL` | empty | FCC extension proxy base URL |
+| `DIRECT_API_KEY` | none | Server-only credential for confidential `/direct` delivery |
 | `DATABASE_URL` | none | Prisma PostgreSQL connection string |
+| `CHAIN_URL` | Coston2 public RPC | Transaction verification RPC |
+| `INSTRUCTION_SENDER` | deployed Coston2 sender | Expected transaction destination |
 
-The API reads and writes PostgreSQL through Prisma. `DATABASE_URL` is required.
+These variables are server-only. The browser calls same-origin `/api/*` routes and receives none of these credentials.
 
 ### FCC and Coston2
 
@@ -222,6 +198,9 @@ The API reads and writes PostgreSQL through Prisma. `DATABASE_URL` is required.
 | `EXT_PROXY_URL` | Public extension proxy URL |
 | `LOCAL_MODE` | `false` for Coston2 |
 | `SIMULATED_TEE` | Flare registration mode |
+| `REHYDRATION_ENABLED` | Load authoritative pledge events before accepting requests |
+| `PLEDGE_REGISTRY_ADDRESS` | Coston2 pledge registry used for rehydration |
+| `REHYDRATION_FROM_BLOCK` | First block scanned for pledge events |
 | `GOVERNANCE_SIGNERS` | Comma-separated governance addresses |
 | `GOVERNANCE_THRESHOLD` | Required governance signatures |
 
@@ -262,7 +241,7 @@ Cleat uses two identifiers:
 
 The browser supplies private invoice fields to the confidential path. The on-chain instruction carries only a commitment and consume-once `requestId`.
 
-The backend may store encrypted application data, UI state, and audit records. It must not:
+The Next.js server routes may store encrypted application data, UI state, and audit records. They must not:
 
 - Decrypt invoice fields
 - Decide eligibility
@@ -285,33 +264,29 @@ The landing page has no dashboard Connect button. Its Review CTA invokes the wal
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | API and proxy configuration health |
-| `GET` | `/invoices` | Persisted borrower invoices |
-| `GET` | `/lender/invoices/:id` | Redacted lender view |
-| `GET` | `/activity` | Protocol attempt history |
-| `POST` | `/protocol/:command` | `check`, `pledge`, `release`, or `status` |
-
-Protocol requests currently verify that the proxy is reachable, then stop with `501` because the Cleat instruction path is not registered.
+| `GET` | `/api/health` | Database and proxy configuration health |
+| `GET` | `/api/tee/info` | Public TEE encryption identity |
+| `GET`, `POST` | `/api/invoices` | Persisted borrower invoices and signed confidential creation |
+| `GET` | `/api/lender/invoices/:id` | Redacted lender view |
+| `GET` | `/api/activity` | Verified transaction history |
+| `POST` | `/api/activity/transactions` | Verify and record a Coston2 instruction |
 
 ## Repository map
 
 ```text
-backend/                     Fastify API and Prisma schema
 contracts/                   FCC instruction sender and interfaces
 go/                          Selected Go TEE implementation
 go/internal/machine/         Cleat pledge and financing state machine
-web/                         Next.js product
+web/                         Next.js product, API routes, and Prisma schema
 scripts/                     Build, test, register, and lifecycle commands
 tools/                       Go deployment and verification tools
 config/                      Coston and Coston2 addresses and proxy templates
 docker-compose.yaml          Official local FCC service stack
 docker-compose.product.yaml  PostgreSQL overlay
-phala-compose.yml            Phala Cloud deployment overlay
+indexer.Dockerfile           Self-hosted Coston2 indexer image
+proxy/                       Pinned FCC proxy images and GCP configuration
 CONTEXT.md                   Protocol and architecture decisions
-HANDOFF.md                   Detailed implementation status
 ```
-
-The Python and TypeScript extension directories are inherited from the FCC scaffold. Cleat selects Go and does not implement its confidential commands in the other languages.
 
 ## Useful commands
 
@@ -323,14 +298,6 @@ npm run dev
 npm run lint
 npx tsc --noEmit
 npm run build
-```
-
-### Backend
-
-```bash
-cd backend
-npm run dev
-npm run build
 npm run prisma:generate
 npm run prisma:migrate
 ```
@@ -339,12 +306,9 @@ npm run prisma:migrate
 
 ```bash
 ./scripts/test-unit.sh go
-./scripts/test-conformance.sh go
 ./scripts/generate-bindings.sh
 cd tools && go build ./...
 ```
-
-The current conformance fixtures validate the inherited greeting handler, not the unfinished Cleat protocol path.
 
 ### Local FCC services
 
@@ -366,32 +330,12 @@ docker compose \
   up
 ```
 
-## Phala Cloud
-
-`phala-compose.yml` runs Redis, the FCC proxy, and the Go extension inside a Phala CVM.
-
-The images must be published before deployment. Phala does not build local Dockerfiles from the compose file.
-
-```bash
-npx phala login
-npx phala deploy -n cleat -c phala-compose.yml -t tdx.small --wait
-```
-
-Use `tdx.medium` if the three-container stack does not fit. Retrieve hardware attestation with:
-
-```bash
-phala cvms attestation <cvm-id>
-```
-
-Phala TDX attestation is not GCP Confidential Space attestation. The current Flare registration path remains simulated test mode until Flare supports the relevant attestation type. Do not label Phala evidence as `GCP_AMD_SEV` or `GCP_INTEL_TDX`.
-
 ## Important limits
 
 - Cleat checks uniqueness only inside its own registry.
 - No sample invoices or protocol verdicts are seeded. Invoice ingestion must come from an authenticated integration or an explicit operator workflow.
 - The current frontend is not evidence that the confidential protocol is complete.
-- The Go machine currently stores state in memory.
-- Rehydration from chain after a TEE restart is not implemented.
+- The Go machine stores private working state in memory and rebuilds public pledge state from Coston2 after a restart.
 - Invoice encryption and the `/direct` delivery path are not implemented.
 - CHECK, PLEDGE, RELEASE, and STATUS are implemented, but the live TEE-to-contract path is not operational yet.
 - FDC settlement verification is not implemented.
@@ -402,17 +346,15 @@ Phala TDX attestation is not GCP Confidential Space attestation. The current Fla
 
 Remaining protocol work:
 
-1. Implement browser sealing and confidential `/direct` delivery.
-2. Add chain-backed TEE state rehydration.
-3. Bind RELEASE to verified settlement evidence.
-4. Resume the saved TEE registration after Coston2 relay providers publish the FTDC availability proof.
-5. Verify the complete wallet-to-TEE-to-contract Coston2 path.
+1. Bind RELEASE to verified settlement evidence.
+2. Resume the saved TEE registration after Coston2 relay providers publish the FTDC availability proof.
+3. Verify the complete wallet-to-TEE-to-contract Coston2 path.
 
-The architecture and invariants are specified in [`CONTEXT.md`](CONTEXT.md). Current implementation notes are in [`HANDOFF.md`](HANDOFF.md).
+The architecture and invariants are specified in [`CONTEXT.md`](CONTEXT.md).
 
 ## Built on
 
 - [Flare Confidential Compute](https://dev.flare.network/fcc/overview)
 - Coston2, chain ID `114`
-- Phala Cloud Intel TDX
-- Next.js, Fastify, Go, Solidity, Prisma, wagmi, and viem
+- GCP Confidential Space on AMD SEV
+- Next.js, Go, Solidity, Prisma, wagmi, and viem

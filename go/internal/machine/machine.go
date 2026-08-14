@@ -12,10 +12,12 @@ package machine
 import (
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -66,6 +68,8 @@ const (
 	DetailUnknownOutcome      = "UNKNOWN_OUTCOME"
 	DetailNoPledge            = "NO_ACTIVE_PLEDGE"
 	DetailStateUnavailable    = "STATE_NOT_REHYDRATED"
+	DetailUnsealed            = "COMMITMENT_NOT_SEALED"
+	DetailCommitmentMismatch  = "COMMITMENT_MISMATCH"
 )
 
 // Roles are demo labels. Authorization is address-based, not self-declared role.
@@ -169,6 +173,25 @@ type StatusResult struct {
 	FinancingStatus string `json:"financingStatus,omitempty"`
 }
 
+// SealRequest is delivered only through the encrypted direct channel.
+type SealRequest struct {
+	InvoiceNumber string `json:"invoiceNumber"`
+	DebtorName    string `json:"debtorName"`
+	Currency      string `json:"currency"`
+	AmountMinor   string `json:"amountMinor"`
+	DueDate       uint64 `json:"dueDate"`
+	Nonce         string `json:"nonce"`
+	Commitment    string `json:"commitment"`
+}
+
+// SealResult confirms that a confidential invoice preimage was validated.
+type SealResult struct {
+	OK         bool   `json:"ok"`
+	Reason     string `json:"reason,omitempty"`
+	Detail     string `json:"detail,omitempty"`
+	Commitment string `json:"commitment,omitempty"`
+}
+
 // Store is the confidential dual machine. Chain mirrors status, not invoices.
 type Store struct {
 	mu sync.Mutex
@@ -180,6 +203,7 @@ type Store struct {
 	financings map[string]*FinancingRecord
 	byCommit   map[string][]string
 	requestIDs map[string]struct{}
+	invoiceIDs map[string]string
 	seq        uint64
 	rehydrated bool
 }
@@ -191,7 +215,69 @@ func NewStore() *Store {
 		financings: make(map[string]*FinancingRecord),
 		byCommit:   make(map[string][]string),
 		requestIDs: make(map[string]struct{}),
+		invoiceIDs: make(map[string]string),
 	}
+}
+
+// Seal validates an encrypted invoice preimage and binds its private invoice ID
+// to the public commitment. The plaintext must never leave the TEE.
+func (s *Store) Seal(req SealRequest) SealResult {
+	invoiceNumber := strings.TrimSpace(req.InvoiceNumber)
+	debtorName := strings.TrimSpace(req.DebtorName)
+	currency := strings.ToUpper(strings.TrimSpace(req.Currency))
+	amount, ok := new(big.Int).SetString(strings.TrimSpace(req.AmountMinor), 10)
+	if invoiceNumber == "" || debtorName == "" || len(currency) != 3 || !ok || amount.Sign() <= 0 || req.DueDate == 0 {
+		return SealResult{Reason: CheckInvalid, Detail: DetailMalformedCommitment}
+	}
+	nonce, err := normalizeCommitment(req.Nonce)
+	if err != nil {
+		return SealResult{Reason: CheckInvalid, Detail: DetailMalformedCommitment}
+	}
+	commitment, err := normalizeCommitment(req.Commitment)
+	if err != nil {
+		return SealResult{Reason: CheckInvalid, Detail: DetailMalformedCommitment}
+	}
+
+	var domain [32]byte
+	copy(domain[:], []byte("CLEAT_INVOICE_V1"))
+	invoicePayload, err := (abi.Arguments{
+		{Type: mustABIType("bytes32")},
+		{Type: mustABIType("string")},
+		{Type: mustABIType("string")},
+		{Type: mustABIType("string")},
+		{Type: mustABIType("uint256")},
+		{Type: mustABIType("uint64")},
+	}).Pack(domain, invoiceNumber, debtorName, currency, amount, req.DueDate)
+	if err != nil {
+		return SealResult{Reason: CheckInvalid, Detail: DetailMalformedCommitment}
+	}
+	invoiceID := crypto.Keccak256Hash(invoicePayload)
+	commitmentPayload, err := (abi.Arguments{
+		{Type: mustABIType("bytes32")},
+		{Type: mustABIType("bytes32")},
+	}).Pack([32]byte(invoiceID), [32]byte(common.HexToHash(nonce)))
+	if err != nil {
+		return SealResult{Reason: CheckInvalid, Detail: DetailMalformedCommitment}
+	}
+	if !strings.EqualFold(crypto.Keccak256Hash(commitmentPayload).Hex(), commitment) {
+		return SealResult{Reason: CheckInvalid, Detail: DetailCommitmentMismatch}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, exists := s.invoiceIDs[commitment]; exists && existing != invoiceID.Hex() {
+		return SealResult{Reason: CheckInvalid, Detail: DetailCommitmentMismatch}
+	}
+	s.invoiceIDs[commitment] = invoiceID.Hex()
+	return SealResult{OK: true, Commitment: commitment}
+}
+
+func mustABIType(kind string) abi.Type {
+	value, err := abi.NewType(kind, "", nil)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 // CompleteRehydration marks an empty chain snapshot as authoritative.
@@ -202,6 +288,45 @@ func (s *Store) CompleteRehydration() {
 	s.mu.Unlock()
 }
 
+// IsRehydrated reports whether the store has loaded an authoritative chain snapshot.
+func (s *Store) IsRehydrated() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rehydrated
+}
+
+// LoadPledge applies one authoritative PledgeRegistry state during startup.
+// It must be called before CompleteRehydration.
+func (s *Store) LoadPledge(record PledgeRecord) error {
+	commitment, err := normalizeCommitment(record.Commitment)
+	if err != nil {
+		return fmt.Errorf("invalid rehydration commitment: %w", err)
+	}
+
+	switch record.Status {
+	case PledgeActive, PledgeDefault:
+		financier, err := normalizeAddress(record.Financier)
+		if err != nil {
+			return fmt.Errorf("invalid rehydration financier: %w", err)
+		}
+		record.Financier = financier
+		record.LastFinancier = financier
+	case PledgeReleased:
+		record.Financier = ""
+	default:
+		return fmt.Errorf("invalid rehydration status %q", record.Status)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.rehydrated {
+		return fmt.Errorf("rehydration already completed")
+	}
+	record.Commitment = commitment
+	s.pledges[commitment] = &record
+	return nil
+}
+
 func (s *Store) getPledge(commitment string) (*PledgeRecord, bool) {
 	if p, ok := s.pledges[commitment]; ok {
 		return p, true
@@ -210,6 +335,26 @@ func (s *Store) getPledge(commitment string) (*PledgeRecord, bool) {
 		return nil, false
 	}
 	return &PledgeRecord{Commitment: commitment, Status: PledgeUnpledged}, true
+}
+
+func (s *Store) invoiceConflict(commitment string) (*PledgeRecord, bool) {
+	invoiceID, sealed := s.invoiceIDs[commitment]
+	if !sealed {
+		return nil, false
+	}
+	for otherCommitment, otherInvoiceID := range s.invoiceIDs {
+		if otherCommitment == commitment || otherInvoiceID != invoiceID {
+			continue
+		}
+		pledge, authoritative := s.getPledge(otherCommitment)
+		if !authoritative {
+			return nil, true
+		}
+		if pledge.Status == PledgeActive || pledge.Status == PledgeDefault {
+			return pledge, true
+		}
+	}
+	return nil, true
 }
 
 // CHECK — any caller. Does not mutate pledge/financing. May consume requestId.
@@ -223,6 +368,14 @@ func (s *Store) Check(req CheckRequest) CheckResult {
 	}
 	if detail := s.gateRequest(req.RequestID, req.ValidUntil, true); detail != "" {
 		return CheckResult{Eligible: false, Reason: CheckInvalid, Detail: detail}
+	}
+	if conflict, sealed := s.invoiceConflict(commitment); !sealed {
+		return CheckResult{Eligible: false, Reason: CheckInvalid, Detail: DetailUnsealed}
+	} else if conflict != nil {
+		if conflict.Status == PledgeDefault {
+			return CheckResult{Eligible: false, Reason: CheckInvalid, Detail: DetailDefaulted, Status: conflict.Status}
+		}
+		return CheckResult{Eligible: false, Reason: CheckAlreadyPledged, Status: conflict.Status}
 	}
 
 	p, authoritative := s.getPledge(commitment)
@@ -268,6 +421,14 @@ func (s *Store) Pledge(req PledgeRequest) PledgeResult {
 	}
 	if detail := s.gateRequest(req.RequestID, req.ValidUntil, true); detail != "" {
 		return PledgeResult{Reason: CheckInvalid, Detail: detail}
+	}
+	if conflict, sealed := s.invoiceConflict(commitment); !sealed {
+		return PledgeResult{Reason: CheckInvalid, Detail: DetailUnsealed}
+	} else if conflict != nil {
+		if conflict.Status == PledgeDefault {
+			return PledgeResult{Reason: CheckInvalid, Detail: DetailDefaulted, Status: conflict.Status}
+		}
+		return PledgeResult{Reason: CheckAlreadyPledged, Detail: DetailAlreadyPledged, Status: conflict.Status}
 	}
 
 	p, authoritative := s.getPledge(commitment)

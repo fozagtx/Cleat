@@ -1,4 +1,4 @@
-# Product overlay — Postgres for Fastify/Prisma.
+# Product overlay — Postgres for Next.js server routes and Prisma.
 # Usage: docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml -f docker-compose.product.yaml up
 # Official compose stays redis + ext-proxy + extension-tee.
 

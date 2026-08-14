@@ -32,7 +32,7 @@ export function AgingMockup() {
 }
 
 const checkFrames = [
-  { status: "Sealed", detail: "The book stays private.", tone: "muted" },
+  { status: "Sealed", detail: "Invoice terms remain confidential.", tone: "muted" },
   { status: "Checking…", detail: "Checking this invoice.", tone: "brand" },
   { status: "Clear to fund", detail: "Not already pledged here.", tone: "ok" },
 ] as const;
@@ -106,7 +106,7 @@ export function ResultMockup() {
           </div>
           <div className="rounded-[8px] border border-[var(--preview-border)] p-3">
             <p className="text-[var(--preview-muted)]">Book</p>
-            <p className="mt-1">Stays private</p>
+            <p className="mt-1">Not disclosed</p>
           </div>
         </div>
       </div>

@@ -83,15 +83,15 @@ COPY --chmod=755 --chown=65532:65532 --from=builder /app/extension-tee /app/exte
 #
 # For a real Confidential Space deploy this MUST be 0 — FTDC rejects simulated
 # attestation. See docs/deployment-steps.md §5. Keep this value identical across
-# go/, python/ and typescript/ Dockerfiles.
-ENV MODE=1 CHAIN_ID=31337 SIMULATED_TEE=true CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
+# the workload image and VM metadata.
+ENV MODE=1 CHAIN_ID=31337 SIMULATED_TEE=true REHYDRATION_ENABLED=false CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
 
 # match tee-node: run as root (USER 0:0) — the TEE workload itself is the isolation boundary
 USER 0:0
 
 # confidential space launch policy label: allow the operator to override these env vars at workload launch
 # without this, the confidential space VM rejects overrides at attestation time and the values baked here are final
-LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,CHAIN_ID,MODE,SIMULATED_TEE,GOVERNANCE_SIGNERS,GOVERNANCE_THRESHOLD,CONFIG_PORT,SIGN_PORT,EXTENSION_PORT"
+LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,CHAIN_ID,MODE,SIMULATED_TEE,REHYDRATION_ENABLED,PLEDGE_REGISTRY_ADDRESS,REHYDRATION_FROM_BLOCK,GOVERNANCE_SIGNERS,GOVERNANCE_THRESHOLD,CONFIG_PORT,SIGN_PORT,EXTENSION_PORT"
 
 EXPOSE 5501 7701 7702
 

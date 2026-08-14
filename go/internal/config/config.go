@@ -10,15 +10,12 @@ import (
 const (
 	Version = "0.1.0"
 
-	OPTypeGreeting      = "GREETING"
-	OPCommandSayHello   = "SAY_HELLO"
-	OPCommandSayGoodbye = "SAY_GOODBYE"
-
-	OPTypeCleat        = "CLEAT"
-	OPCommandCheck     = "CHECK"
-	OPCommandPledge    = "PLEDGE"
-	OPCommandRelease   = "RELEASE"
-	OPCommandStatus    = "STATUS"
+	OPTypeCleat      = "CLEAT"
+	OPCommandSeal    = "SEAL"
+	OPCommandCheck   = "CHECK"
+	OPCommandPledge  = "PLEDGE"
+	OPCommandRelease = "RELEASE"
+	OPCommandStatus  = "STATUS"
 
 	TimeoutShutdown = 5 * time.Second
 )

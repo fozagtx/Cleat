@@ -1,7 +1,7 @@
 export const questions = [
   {
-    title: "What stays private?",
-    body: "The customer, the amount, the rest of the book. Flare Confidential Compute answers one invoice.",
+    title: "What is disclosed?",
+    body: "Only whether the invoice is already pledged here. Customer, amount, due date, and the rest of the book remain confidential.",
   },
   {
     title: "What does this cost?",
@@ -9,7 +9,7 @@ export const questions = [
   },
   {
     title: "Do I hook up NetSuite?",
-    body: "No. Seeded invoices. Your ERP is not in this loop.",
+    body: "No. Add the invoice you want checked. Your ERP is not connected in this build.",
   },
   {
     title: "Is this a UCC filing?",

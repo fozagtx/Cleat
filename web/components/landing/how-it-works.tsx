@@ -41,7 +41,7 @@ export function HowItWorks() {
             <p className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">
               02 · Check
             </p>
-            <h3 className="mt-3 text-2xl font-medium tracking-[-0.5px]">Run it privately</h3>
+            <h3 className="mt-3 text-2xl font-medium tracking-[-0.5px]">Check it confidentially</h3>
             <p className="mt-2 text-[var(--landing-muted-fg)]">The customer and amount stay sealed.</p>
           </div>
           <div aria-hidden="true" className="how-seal">
@@ -56,7 +56,7 @@ export function HowItWorks() {
             </div>
             <div className="how-seal-target">
               <span className="landing-mono text-[10px] tracking-[0.5px] text-[var(--preview-muted)]">
-                PRIVATE CHECK
+                CONFIDENTIAL CHECK
               </span>
               <span className="mt-2 block text-sm">Sealed</span>
             </div>
@@ -71,7 +71,7 @@ export function HowItWorks() {
             <h3 className="mt-3 text-2xl font-medium tracking-[-0.5px]">
               Already pledged, or clear to fund
             </h3>
-            <p className="mt-2 text-[var(--landing-muted-fg)]">Nothing else leaves the check.</p>
+            <p className="mt-2 text-[var(--landing-muted-fg)]">Only the eligibility result is disclosed.</p>
           </div>
           <div aria-hidden="true" className="how-answer">
             <div className="how-answer-status">

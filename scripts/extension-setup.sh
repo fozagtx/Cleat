@@ -46,7 +46,4 @@ log "EXTENSION_ID:       ${EXTENSION_ID:-<not set>}"
 log "INSTRUCTION_SENDER: ${INSTRUCTION_SENDER:-<not set>}"
 log "CHAIN_URL:          ${CHAIN_URL:-<not set>}"
 
-# --- Add your extension-specific setup below ---
-# The Hello World scaffold has no extra setup. Replace this with your own logic.
-
-log "No extension-specific setup needed (Hello World scaffold)."
+log "Cleat setup uses the deployed registry addresses from config/extension.env."

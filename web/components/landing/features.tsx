@@ -23,9 +23,9 @@ const blocks: {
     Mock: AgingMockup,
   },
   {
-    eyebrow: "Confidential",
-    title: "They check one receivable",
-    body: "The check runs privately. They get an answer. Not the book.",
+    eyebrow: "Selective disclosure",
+    title: "Disclose the answer, not the receivable",
+    body: "The confidential check returns one eligibility result. Customer, amount, due date, and the rest of the book remain sealed.",
     src: "/landing/harbor.jpg",
     Mock: CheckMockup,
   },
