@@ -69,9 +69,11 @@ export function HowItWorks() {
               03 · Answer
             </p>
             <h3 className="mt-3 text-2xl font-medium tracking-[-0.5px]">
-              Already pledged, or clear to fund
+              Yes it is pledged, or no it is free
             </h3>
-            <p className="mt-2 text-[var(--landing-muted-fg)]">Only the eligibility result is disclosed.</p>
+            <p className="mt-2 text-[var(--landing-muted-fg)]">
+              That is the only answer the lender receives.
+            </p>
           </div>
           <div aria-hidden="true" className="how-answer">
             <div className="how-answer-status">

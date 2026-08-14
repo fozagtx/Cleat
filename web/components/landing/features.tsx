@@ -25,7 +25,7 @@ const blocks: {
   {
     eyebrow: "Selective disclosure",
     title: "Disclose the answer, not the receivable",
-    body: "The confidential check returns one eligibility result. Customer, amount, due date, and the rest of the book remain sealed.",
+    body: "The check returns one result. The lender does not see the customer, the amount, or any other invoice.",
     src: "/landing/harbor.jpg",
     Mock: CheckMockup,
   },

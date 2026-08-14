@@ -14,7 +14,7 @@ export function LandingHero() {
               <span className="text-[var(--landing-brand)]">the whole book</span>.
             </h1>
             <p className="max-w-lg text-base leading-8 text-[var(--landing-muted-fg)] sm:text-xl">
-              Cleat selectively discloses one answer: already pledged, or clear to fund.
+              A lender asks if this one invoice is already pledged as collateral. They get yes or no. They never see the rest of the customer list.
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <WalletReviewButton className={primaryBtn} />

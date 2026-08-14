@@ -4,14 +4,14 @@
 
 # Cleat
 
-A lender checks one invoice. They get already pledged or clear to fund. They do not get the rest of the book.
+A company wants a loan against one unpaid invoice. A lender needs to know if that invoice is already pledged as collateral somewhere else. Today the borrower has to send the whole customer list. Cleat answers only that one question: **already used here, or free to fund.** Other invoices, customer names, and amounts stay private.
 
 Receivables desk on [Flare Confidential Compute](https://dev.flare.network/fcc/overview). Built for [Flare Summer Signal](https://dorahacks.io/hackathon/flaresummersignal/detail), Confidential Compute Apps.
 
 | | |
 |---|---|
-| For | Factors who must refuse a duplicate pledge without an aging report |
-| Also | Borrowers who prove one invoice is free to fund without publishing the book |
+| For | Lenders who will not fund an invoice that is already collateral |
+| Also | Borrowers who will not send their full customer list to get that answer |
 | App | [cleat-finance.vercel.app](https://cleat-finance.vercel.app) |
 | TEE `/info` | [cleat-finance.vercel.app/api/tee/info](https://cleat-finance.vercel.app/api/tee/info) |
 | FCC proxy | [cleat-finance.vercel.app/api/fcc-proxy/info](https://cleat-finance.vercel.app/api/fcc-proxy/info) |
