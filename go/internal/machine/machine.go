@@ -39,9 +39,9 @@ const (
 
 // CHECK reasons — architect axis, not the PRD's NOT_PLEDGED alias.
 const (
-	CheckClear           = "CLEAR"            // eligible; PRD §12 NOT_PLEDGED
-	CheckAlreadyPledged  = "ALREADY_PLEDGED"  // live lien
-	CheckInvalid         = "INVALID"          // malformed, expired, defaulted, replay
+	CheckClear          = "CLEAR"           // eligible; PRD §12 NOT_PLEDGED
+	CheckAlreadyPledged = "ALREADY_PLEDGED" // live lien
+	CheckInvalid        = "INVALID"         // malformed, expired, defaulted, replay
 )
 
 // RELEASE outcomes. FCC has no DEFAULT command; DEFAULT is an outcome of RELEASE.
@@ -65,6 +65,7 @@ const (
 	DetailCallerMismatch      = "CALLER_NOT_FINANCIER"
 	DetailUnknownOutcome      = "UNKNOWN_OUTCOME"
 	DetailNoPledge            = "NO_ACTIVE_PLEDGE"
+	DetailStateUnavailable    = "STATE_NOT_REHYDRATED"
 )
 
 // Roles are demo labels. Authorization is address-based, not self-declared role.
@@ -175,11 +176,12 @@ type Store struct {
 	Now      func() int64
 	Protocol string // extra RELEASE/DEFAULT actor; empty = financier only
 
-	pledges     map[string]*PledgeRecord
-	financings  map[string]*FinancingRecord
-	byCommit    map[string][]string
-	requestIDs  map[string]struct{}
-	seq         uint64
+	pledges    map[string]*PledgeRecord
+	financings map[string]*FinancingRecord
+	byCommit   map[string][]string
+	requestIDs map[string]struct{}
+	seq        uint64
+	rehydrated bool
 }
 
 func NewStore() *Store {
@@ -192,11 +194,22 @@ func NewStore() *Store {
 	}
 }
 
-func (s *Store) getPledge(commitment string) *PledgeRecord {
+// CompleteRehydration marks an empty chain snapshot as authoritative.
+// Callers must only invoke this after all on-chain pledge state has been loaded.
+func (s *Store) CompleteRehydration() {
+	s.mu.Lock()
+	s.rehydrated = true
+	s.mu.Unlock()
+}
+
+func (s *Store) getPledge(commitment string) (*PledgeRecord, bool) {
 	if p, ok := s.pledges[commitment]; ok {
-		return p
+		return p, true
 	}
-	return &PledgeRecord{Commitment: commitment, Status: PledgeUnpledged}
+	if !s.rehydrated {
+		return nil, false
+	}
+	return &PledgeRecord{Commitment: commitment, Status: PledgeUnpledged}, true
 }
 
 // CHECK — any caller. Does not mutate pledge/financing. May consume requestId.
@@ -208,11 +221,14 @@ func (s *Store) Check(req CheckRequest) CheckResult {
 	if err != nil {
 		return CheckResult{Eligible: false, Reason: CheckInvalid, Detail: DetailMalformedCommitment}
 	}
-	if detail := s.gateRequest(req.RequestID, req.ValidUntil, false); detail != "" {
+	if detail := s.gateRequest(req.RequestID, req.ValidUntil, true); detail != "" {
 		return CheckResult{Eligible: false, Reason: CheckInvalid, Detail: detail}
 	}
 
-	p := s.getPledge(commitment)
+	p, authoritative := s.getPledge(commitment)
+	if !authoritative {
+		return CheckResult{Eligible: false, Reason: CheckInvalid, Detail: DetailStateUnavailable}
+	}
 	switch p.Status {
 	case PledgeUnpledged, PledgeReleased:
 		return CheckResult{Eligible: true, Reason: CheckClear, Status: p.Status}
@@ -240,14 +256,9 @@ func (s *Store) Pledge(req PledgeRequest) PledgeResult {
 	if err != nil {
 		return PledgeResult{Reason: CheckInvalid, Detail: DetailMissingFinancier}
 	}
-	caller := strings.TrimSpace(req.Caller)
-	if caller == "" {
-		caller = financier
-	} else {
-		caller, err = normalizeAddress(caller)
-		if err != nil {
-			return PledgeResult{Reason: CheckInvalid, Detail: DetailMalformedAddress}
-		}
+	caller, err := normalizeAddress(req.Caller)
+	if err != nil {
+		return PledgeResult{Reason: CheckInvalid, Detail: DetailMalformedAddress}
 	}
 	if caller != financier {
 		return PledgeResult{Reason: CheckInvalid, Detail: DetailCallerMismatch}
@@ -259,7 +270,10 @@ func (s *Store) Pledge(req PledgeRequest) PledgeResult {
 		return PledgeResult{Reason: CheckInvalid, Detail: detail}
 	}
 
-	p := s.getPledge(commitment)
+	p, authoritative := s.getPledge(commitment)
+	if !authoritative {
+		return PledgeResult{Reason: CheckInvalid, Detail: DetailStateUnavailable}
+	}
 	switch p.Status {
 	case PledgeActive:
 		return PledgeResult{Reason: CheckAlreadyPledged, Detail: DetailAlreadyPledged, Status: p.Status}
@@ -325,7 +339,10 @@ func (s *Store) Release(req ReleaseRequest) ReleaseResult {
 		outcome = OutcomeRepaid
 	}
 
-	p := s.getPledge(commitment)
+	p, authoritative := s.getPledge(commitment)
+	if !authoritative {
+		return ReleaseResult{Reason: CheckInvalid, Detail: DetailStateUnavailable}
+	}
 	if p.Status != PledgeActive {
 		return ReleaseResult{Reason: CheckInvalid, Detail: DetailNoPledge, Status: p.Status}
 	}
@@ -382,7 +399,10 @@ func (s *Store) Status(req StatusRequest) StatusResult {
 	if err != nil {
 		return StatusResult{Reason: CheckInvalid, Detail: DetailMalformedCommitment}
 	}
-	p := s.getPledge(commitment)
+	p, authoritative := s.getPledge(commitment)
+	if !authoritative {
+		return StatusResult{Reason: CheckInvalid, Detail: DetailStateUnavailable}
+	}
 	finStatus := FinancingNone
 	if p.FinancingID != "" {
 		if fin := s.financings[p.FinancingID]; fin != nil {

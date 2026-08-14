@@ -2,26 +2,27 @@
 pragma solidity ^0.8.27;
 
 // TODO: Replace local interfaces with imports from flare-smart-contracts-v2 once published as a package.
-import { ITeeExtensionRegistry } from "./interfaces/ITeeExtensionRegistry.sol";
-import { ITeeMachineRegistry } from "./interfaces/ITeeMachineRegistry.sol";
+import {ITeeExtensionRegistry} from "./interfaces/ITeeExtensionRegistry.sol";
+import {ITeeMachineRegistry} from "./interfaces/ITeeMachineRegistry.sol";
 
 /// @title CleatInstructionSender
 /// @author Flare Foundation
-/// @notice Hello World example — on-chain entry point for sending instructions to the TEE.
+/// @notice On-chain entry point for Cleat confidential-compute instructions.
 ///
 /// DO NOT MODIFY: constructor, setExtensionId(), _getExtensionId()
 contract CleatInstructionSender {
-    /// @notice Operation type for greeting actions (SAY_HELLO, SAY_GOODBYE).
+    /// @notice Cleat operation type.
     // forge-lint: disable-next-line(unsafe-typecast)
-    bytes32 public constant OP_TYPE_GREETING = bytes32("GREETING");
+    bytes32 public constant OP_TYPE_CLEAT = bytes32("CLEAT");
 
-    /// @notice Command for the SAY_HELLO action.
     // forge-lint: disable-next-line(unsafe-typecast)
-    bytes32 public constant OP_COMMAND_SAY_HELLO = bytes32("SAY_HELLO");
+    bytes32 public constant OP_COMMAND_CHECK = bytes32("CHECK");
+    // forge-lint: disable-next-line(unsafe-typecast)
+    bytes32 public constant OP_COMMAND_PLEDGE = bytes32("PLEDGE");
+    // forge-lint: disable-next-line(unsafe-typecast)
+    bytes32 public constant OP_COMMAND_RELEASE = bytes32("RELEASE");
 
-    /// @notice Command for the SAY_GOODBYE action.
-    // forge-lint: disable-next-line(unsafe-typecast)
-    bytes32 public constant OP_COMMAND_SAY_GOODBYE = bytes32("SAY_GOODBYE");
+    uint64 public constant REQUEST_TTL = 10 minutes;
 
     /// @notice Reference to the TEE extension registry contract.
     ITeeExtensionRegistry public immutable TEE_EXTENSION_REGISTRY;
@@ -34,19 +35,37 @@ contract CleatInstructionSender {
 
     uint256 private _extensionId;
 
-    /// @notice Payload for the SAY_GOODBYE instruction.
-    struct SayGoodbyeMessage {
-        string name;
-        string reason;
+    /// @notice Public fields delivered with an FCC instruction.
+    /// @dev The FCC registry creates requestId/instructionId; it is recorded after
+    /// sendInstructions returns and therefore cannot be embedded in originalMessage.
+    struct CleatMessage {
+        bytes32 commitment;
+        address financier;
+        uint64 validUntil;
     }
+
+    struct Request {
+        bytes32 command;
+        bytes32 commitment;
+        address financier;
+        uint64 validUntil;
+        bool exists;
+    }
+
+    mapping(bytes32 requestId => Request request) private _requests;
+
+    event CleatInstructionSent(
+        bytes32 indexed requestId,
+        bytes32 indexed command,
+        bytes32 indexed commitment,
+        address financier,
+        uint64 validUntil
+    );
 
     /// @notice Initializes the contract with registry addresses.
     /// @param _teeExtensionRegistry Address of the TEE extension registry.
     /// @param _teeMachineRegistry Address of the TEE machine registry.
-    constructor(
-        ITeeExtensionRegistry _teeExtensionRegistry,
-        ITeeMachineRegistry _teeMachineRegistry
-    ) {
+    constructor(ITeeExtensionRegistry _teeExtensionRegistry, ITeeMachineRegistry _teeMachineRegistry) {
         require(address(_teeExtensionRegistry) != address(0), "TeeExtensionRegistry cannot be zero address");
         require(address(_teeMachineRegistry) != address(0), "TeeMachineRegistry cannot be zero address");
         require(address(_teeExtensionRegistry).code.length > 0, "TeeExtensionRegistry has no code");
@@ -70,48 +89,55 @@ contract CleatInstructionSender {
         revert("Extension ID not found.");
     }
 
-    /// @notice Sends a SAY_HELLO instruction to the TEE.
-    /// @param _message JSON-encoded payload (e.g. {"name": "Alice"}).
-    function sendSayHello(bytes calldata _message) external payable {
-        address[] memory teeIds = TEE_MACHINE_REGISTRY.getRandomTeeIds(_getExtensionId(), 1);
-        address[] memory cosigners = new address[](0);
-
-        ITeeExtensionRegistry.TeeInstructionParams memory params = ITeeExtensionRegistry.TeeInstructionParams({
-            opType: OP_TYPE_GREETING,
-            opCommand: OP_COMMAND_SAY_HELLO,
-            message: _message,
-            cosigners: cosigners,
-            cosignersThreshold: 0,
-            claimBackAddress: msg.sender
-        });
-
-
-        TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(
-            teeIds,
-            params
-        );
+    /// @notice Sends a read-only uniqueness check.
+    function sendCheck(bytes32 _commitment) external payable returns (bytes32 requestId) {
+        requestId = _sendInstruction(OP_COMMAND_CHECK, _commitment, address(0));
     }
 
-    /// @notice Sends a SAY_GOODBYE instruction to the TEE.
-    /// @param _name The name of the person to say goodbye to.
-    /// @param _reason The reason for saying goodbye.
-    function sendSayGoodbye(string calldata _name, string calldata _reason) external payable {
+    /// @notice Sends a check-then-set pledge instruction.
+    /// @dev The financier is always msg.sender and is never accepted as input.
+    function sendPledge(bytes32 _commitment) external payable returns (bytes32 requestId) {
+        requestId = _sendInstruction(OP_COMMAND_PLEDGE, _commitment, msg.sender);
+    }
+
+    /// @notice Sends a release/default-evaluation instruction.
+    /// @dev Authorization is enforced again when the attested result is consumed.
+    function sendRelease(bytes32 _commitment) external payable returns (bytes32 requestId) {
+        requestId = _sendInstruction(OP_COMMAND_RELEASE, _commitment, msg.sender);
+    }
+
+    /// @notice Returns the immutable binding recorded for an FCC instruction.
+    function getRequest(bytes32 _requestId) external view returns (Request memory) {
+        return _requests[_requestId];
+    }
+
+    function _sendInstruction(bytes32 _command, bytes32 _commitment, address _financier)
+        private
+        returns (bytes32 requestId)
+    {
+        require(_commitment != bytes32(0), "Commitment cannot be zero.");
+
+        uint64 validUntil = uint64(block.timestamp + REQUEST_TTL);
         address[] memory teeIds = TEE_MACHINE_REGISTRY.getRandomTeeIds(_getExtensionId(), 1);
         address[] memory cosigners = new address[](0);
 
         ITeeExtensionRegistry.TeeInstructionParams memory params = ITeeExtensionRegistry.TeeInstructionParams({
-            opType: OP_TYPE_GREETING,
-            opCommand: OP_COMMAND_SAY_GOODBYE,
-            message: abi.encode(SayGoodbyeMessage({name: _name, reason: _reason})),
+            opType: OP_TYPE_CLEAT,
+            opCommand: _command,
+            message: abi.encode(CleatMessage({commitment: _commitment, financier: _financier, validUntil: validUntil})),
             cosigners: cosigners,
             cosignersThreshold: 0,
             claimBackAddress: msg.sender
         });
 
-        TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(
-            teeIds,
-            params
-        );
+        requestId = TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(teeIds, params);
+        require(requestId != bytes32(0), "Invalid request ID.");
+        require(!_requests[requestId].exists, "Duplicate request ID.");
+
+        _requests[requestId] = Request({
+            command: _command, commitment: _commitment, financier: _financier, validUntil: validUntil, exists: true
+        });
+        emit CleatInstructionSent(requestId, _command, _commitment, _financier, validUntil);
     }
 
     /// @notice Returns the cached extension ID, reverting if not yet set.

@@ -19,8 +19,21 @@ const plex = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cleat",
-  description: "Confidential check on one invoice. Stop sending your whole customer list just to finance it.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://cleat-finance.vercel.app"),
+  title: "Cleat | Private invoice checks",
+  description: "Check one invoice without sharing the whole customer list.",
+  openGraph: {
+    description: "Check one invoice without sharing the whole customer list.",
+    siteName: "Cleat",
+    title: "Cleat | Private invoice checks",
+    type: "website",
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    description: "Check one invoice without sharing the whole customer list.",
+    title: "Cleat | Private invoice checks",
+  },
 };
 
 export default function RootLayout({

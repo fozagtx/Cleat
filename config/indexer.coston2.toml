@@ -1,0 +1,37 @@
+[indexer]
+mode = "fsp"
+history_epochs = 0
+rpc_concurrency = 4
+batch_size = 1000
+log_range = 30
+new_block_check_millis = 1000
+confirmations = 1
+no_new_blocks_delay_warning = 60
+
+[[indexer.collect_logs]]
+contract_address = "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE"
+topic = "undefined"
+
+[logger]
+level = "INFO"
+file = ""
+console = true
+
+[chain]
+node_url = "https://coston2-api.flare.network/ext/C/rpc"
+api_key = ""
+chain_type = 1
+
+[db]
+host = "mysql"
+port = 3306
+database = "flare_ftso_indexer"
+username = "root"
+password = "root"
+log_queries = false
+drop_table_at_start = false
+history_drop = 0
+
+[timeout]
+backoff_max_elapsed_time_seconds = 0
+rpc_timeout_millis = 10000

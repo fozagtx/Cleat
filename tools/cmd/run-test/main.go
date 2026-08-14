@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"strings"
 	"time"
@@ -11,27 +10,11 @@ import (
 	"extension-scaffold/tools/pkg/support"
 	instrutils "extension-scaffold/tools/pkg/utils"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 	"github.com/pkg/errors"
 )
-
-// Expected response shapes for the scaffold's Hello World operations.
-//
-// These are deliberately declared here rather than imported from the extension:
-// this tool asserts on the *wire format*, and must run unchanged against every
-// language implementation (see docs/extension-contract.md). Keeping them local
-// is what lets tools/ stay independent of any one implementation.
-
-type sayHelloResponse struct {
-	Greeting       string `json:"greeting"`
-	GreetingNumber int    `json:"greetingNumber"`
-}
-
-type sayGoodbyeResponse struct {
-	Farewell       string `json:"farewell"`
-	FarewellNumber int    `json:"farewellNumber"`
-}
 
 func main() {
 	af := flag.String("a", configs.AddressesFile, "file with deployed addresses")
@@ -60,17 +43,10 @@ func main() {
 		}
 	}
 
-	// --- Test case 1: Send a SAY_HELLO instruction ---
-	logger.Infof("Sending SAY_HELLO instruction...")
-
-	payload, err := json.Marshal(map[string]interface{}{
-		"name": "World",
-	})
-	if err != nil {
-		fccutils.FatalWithCause(err)
-	}
-
-	instructionId, _, err := instrutils.SendSayHello(testSupport, instructionSenderAddress, payload)
+	// The smoke test uses a non-zero commitment and verifies Cleat's ABI result.
+	commitment := common.HexToHash("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	logger.Infof("Sending CHECK instruction...")
+	instructionId, _, err := instrutils.SendCheck(testSupport, instructionSenderAddress, commitment)
 	if err != nil {
 		fccutils.FatalWithCause(err)
 	}
@@ -78,33 +54,16 @@ func main() {
 
 	time.Sleep(5 * time.Second)
 
-	err = verifyHelloResult(*pf, instructionId)
+	err = verifyCleatResult(*pf, instructionId, commitment)
 	if err != nil {
 		fccutils.FatalWithCause(err)
 	}
-	logger.Infof("Test passed: SAY_HELLO instruction processed successfully")
-
-	// --- Test case 2: Send a SAY_GOODBYE instruction ---
-	logger.Infof("Sending SAY_GOODBYE instruction...")
-
-	goodbyeInstructionId, _, err := instrutils.SendSayGoodbye(testSupport, instructionSenderAddress, "World", "heading out")
-	if err != nil {
-		fccutils.FatalWithCause(err)
-	}
-	logger.Infof("Instruction sent. ID: %s", goodbyeInstructionId.Hex())
-
-	time.Sleep(5 * time.Second)
-
-	err = verifyGoodbyeResult(*pf, goodbyeInstructionId)
-	if err != nil {
-		fccutils.FatalWithCause(err)
-	}
-	logger.Infof("Test passed: SAY_GOODBYE instruction processed successfully")
+	logger.Infof("Test passed: CHECK instruction processed successfully")
 
 	logger.Infof("All tests passed.")
 }
 
-func verifyHelloResult(proxyURL string, instructionId common.Hash) error {
+func verifyCleatResult(proxyURL string, instructionId, expectedCommitment common.Hash) error {
 	// --- Generic: poll proxy for result (do not modify) ---
 	actionResponse, err := fccutils.ActionResult(proxyURL, instructionId)
 	if err != nil {
@@ -123,56 +82,33 @@ func verifyHelloResult(proxyURL string, instructionId common.Hash) error {
 		return errors.New("expected response data but got none")
 	}
 
-	var resp sayHelloResponse
-	err = json.Unmarshal(actionResult.Data, &resp)
-	if err != nil {
-		return errors.Errorf("failed to unmarshal response: %s", err)
-	}
-
-	if resp.Greeting == "" {
-		return errors.New("expected non-empty Greeting")
-	}
-	if resp.GreetingNumber < 1 {
-		return errors.Errorf("expected GreetingNumber >= 1, got %d", resp.GreetingNumber)
-	}
-
-	logger.Infof("Response data: %+v", resp)
-
-	return nil
-}
-
-func verifyGoodbyeResult(proxyURL string, instructionId common.Hash) error {
-	actionResponse, err := fccutils.ActionResult(proxyURL, instructionId)
+	bytes32Type, err := abi.NewType("bytes32", "", nil)
 	if err != nil {
 		return err
 	}
-	actionResult := actionResponse.Result
-
-	if actionResult.Status == 0 {
-		return errors.Errorf("instruction processing failed: %s", actionResult.Log)
-	}
-	if actionResult.Status == 2 {
-		return errors.New("instruction still pending after polling, expected completed")
-	}
-
-	if len(actionResult.Data) == 0 {
-		return errors.New("expected response data but got none")
-	}
-
-	var resp sayGoodbyeResponse
-	err = json.Unmarshal(actionResult.Data, &resp)
+	uint8Type, err := abi.NewType("uint8", "", nil)
 	if err != nil {
-		return errors.Errorf("failed to unmarshal response: %s", err)
+		return err
 	}
-
-	if resp.Farewell == "" {
-		return errors.New("expected non-empty Farewell")
+	values, err := (abi.Arguments{{Type: bytes32Type}, {Type: bytes32Type}, {Type: uint8Type}}).Unpack(actionResult.Data)
+	if err != nil {
+		return errors.Errorf("failed to decode Cleat result: %s", err)
 	}
-	if resp.FarewellNumber < 1 {
-		return errors.Errorf("expected FarewellNumber >= 1, got %d", resp.FarewellNumber)
+	if len(values) != 3 {
+		return errors.Errorf("expected 3 result values, got %d", len(values))
 	}
-
-	logger.Infof("Response data: %+v", resp)
-
+	requestID := common.Hash(values[0].([32]byte))
+	commitment := common.Hash(values[1].([32]byte))
+	verdict := values[2].(uint8)
+	if requestID != instructionId {
+		return errors.Errorf("request ID mismatch: expected %s, got %s", instructionId, requestID)
+	}
+	if commitment != expectedCommitment {
+		return errors.Errorf("commitment mismatch: expected %s, got %s", expectedCommitment, commitment)
+	}
+	if verdict > 2 {
+		return errors.Errorf("invalid CHECK verdict: %d", verdict)
+	}
+	logger.Infof("Response verdict: %d", verdict)
 	return nil
 }

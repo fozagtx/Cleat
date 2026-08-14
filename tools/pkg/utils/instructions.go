@@ -102,7 +102,36 @@ func SetExtensionId(s *support.Support, instructionSenderAddress common.Address)
 	return nil
 }
 
-func SendSayHello(s *support.Support, instructionSenderAddress common.Address, message []byte) (common.Hash, common.Hash, error) {
+func SendCheck(
+	s *support.Support,
+	instructionSenderAddress common.Address,
+	commitment common.Hash,
+) (common.Hash, common.Hash, error) {
+	return sendCleatInstruction(s, instructionSenderAddress, "sendCheck", commitment)
+}
+
+func SendPledge(
+	s *support.Support,
+	instructionSenderAddress common.Address,
+	commitment common.Hash,
+) (common.Hash, common.Hash, error) {
+	return sendCleatInstruction(s, instructionSenderAddress, "sendPledge", commitment)
+}
+
+func SendRelease(
+	s *support.Support,
+	instructionSenderAddress common.Address,
+	commitment common.Hash,
+) (common.Hash, common.Hash, error) {
+	return sendCleatInstruction(s, instructionSenderAddress, "sendRelease", commitment)
+}
+
+func sendCleatInstruction(
+	s *support.Support,
+	instructionSenderAddress common.Address,
+	method string,
+	commitment common.Hash,
+) (common.Hash, common.Hash, error) {
 	sender, err := cleat.NewCleatInstructionSender(instructionSenderAddress, s.ChainClient)
 	if err != nil {
 		return common.Hash{}, common.Hash{}, errors.Errorf("failed to bind contract: %s", err)
@@ -114,13 +143,23 @@ func SendSayHello(s *support.Support, instructionSenderAddress common.Address, m
 	}
 	opts.Value = big.NewInt(1000000) // Instruction fee in wei — must match registry's required fee
 
-	tx, err := sender.SendSayHello(opts, message)
+	var tx *types.Transaction
+	switch method {
+	case "sendCheck":
+		tx, err = sender.SendCheck(opts, commitment)
+	case "sendPledge":
+		tx, err = sender.SendPledge(opts, commitment)
+	case "sendRelease":
+		tx, err = sender.SendRelease(opts, commitment)
+	default:
+		return common.Hash{}, common.Hash{}, errors.Errorf("unsupported Cleat method: %s", method)
+	}
 	if err != nil {
 		reason := fccutils.DecodeRevertReason(err)
 		if reason == "" {
 			parsed, _ := cleat.CleatInstructionSenderMetaData.GetAbi()
 			if parsed != nil {
-				callData, packErr := parsed.Pack("sendSayHello", message)
+				callData, packErr := parsed.Pack(method, commitment)
 				if packErr == nil {
 					from := crypto.PubkeyToAddress(s.Prv.PublicKey)
 					reason = fccutils.SimulateAndDecodeRevert(
@@ -144,7 +183,7 @@ func SendSayHello(s *support.Support, instructionSenderAddress common.Address, m
 	if receipt.Status != 1 {
 		parsed, _ := cleat.CleatInstructionSenderMetaData.GetAbi()
 		if parsed != nil {
-			callData, packErr := parsed.Pack("sendSayHello", message)
+			callData, packErr := parsed.Pack(method, commitment)
 			if packErr == nil {
 				from := crypto.PubkeyToAddress(s.Prv.PublicKey)
 				reason := fccutils.SimulateAndDecodeRevert(
@@ -156,44 +195,6 @@ func SendSayHello(s *support.Support, instructionSenderAddress common.Address, m
 				}
 			}
 		}
-		return common.Hash{}, common.Hash{}, errors.Errorf("transaction failed with status: %d", receipt.Status)
-	}
-
-	if len(receipt.Logs) == 0 {
-		return common.Hash{}, common.Hash{}, errors.New("no logs found in receipt")
-	}
-
-	instructionSent, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
-	if err != nil {
-		return common.Hash{}, common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
-	}
-
-	return instructionSent.InstructionId, receipt.TxHash, nil
-}
-
-func SendSayGoodbye(s *support.Support, instructionSenderAddress common.Address, name string, reason string) (common.Hash, common.Hash, error) {
-	sender, err := cleat.NewCleatInstructionSender(instructionSenderAddress, s.ChainClient)
-	if err != nil {
-		return common.Hash{}, common.Hash{}, errors.Errorf("failed to bind contract: %s", err)
-	}
-
-	opts, err := bind.NewKeyedTransactorWithChainID(s.Prv, s.ChainID)
-	if err != nil {
-		return common.Hash{}, common.Hash{}, errors.Errorf("failed to create transactor: %s", err)
-	}
-	opts.Value = big.NewInt(1000000) // Instruction fee in wei — must match registry's required fee
-
-	tx, err := sender.SendSayGoodbye(opts, name, reason)
-	if err != nil {
-		return common.Hash{}, common.Hash{}, errors.Errorf("failed to send instruction: %s", err)
-	}
-
-	receipt, err := bind.WaitMined(context.Background(), s.ChainClient, tx)
-	if err != nil {
-		return common.Hash{}, common.Hash{}, errors.Errorf("failed waiting for transaction: %s", err)
-	}
-
-	if receipt.Status != 1 {
 		return common.Hash{}, common.Hash{}, errors.Errorf("transaction failed with status: %d", receipt.Status)
 	}
 

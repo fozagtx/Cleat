@@ -9,7 +9,8 @@ testing/
 .claude/
 cache/
 out/
-config/
+config/*
+!config/indexer.coston2.toml
 contracts/
 scripts/
 proxy/

@@ -8,7 +8,7 @@ import { formatDateUtc, formatFiatMinor } from "@/lib/format";
 
 export function LenderDesk() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [selected, setSelected] = useState<string>("inv-001");
+  const [selected, setSelected] = useState<string>("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

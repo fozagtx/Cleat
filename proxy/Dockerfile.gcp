@@ -1,0 +1,18 @@
+ARG TEE_PROXY_VERSION=v0.0.18
+
+FROM golang:1.25.1-alpine AS builder
+RUN apk add --no-cache git
+ARG TEE_PROXY_VERSION
+WORKDIR /src
+RUN git clone --depth 1 --branch "${TEE_PROXY_VERSION}" https://github.com/flare-foundation/tee-proxy.git .
+RUN go mod download \
+    && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o /out/proxy ./cmd/proxy
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+COPY --from=builder /out/proxy /app/proxy
+COPY config.gcp.toml /app/config/config.toml
+USER 1001:1001
+EXPOSE 6663 6664
+CMD ["/app/proxy"]

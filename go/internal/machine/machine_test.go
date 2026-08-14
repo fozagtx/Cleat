@@ -5,19 +5,28 @@ import (
 )
 
 const (
-	inv   = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	invB  = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	alice = "0x1111111111111111111111111111111111111111"
-	bob   = "0x2222222222222222222222222222222222222222"
+	inv     = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	invB    = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	alice   = "0x1111111111111111111111111111111111111111"
+	bob     = "0x2222222222222222222222222222222222222222"
 	mallory = "0x3333333333333333333333333333333333333333"
-	proto = "0x4444444444444444444444444444444444444444"
+	proto   = "0x4444444444444444444444444444444444444444"
 )
 
 func storeAt(ts int64) *Store {
 	s := NewStore()
 	s.Now = func() int64 { return ts }
 	s.Protocol = proto
+	s.CompleteRehydration()
 	return s
+}
+
+func TestCheck_UnrehydratedStoreFailsClosed(t *testing.T) {
+	s := NewStore()
+	got := s.Check(CheckRequest{InvoiceCommitment: inv, RequestID: "restart-check"})
+	if got.Eligible || got.Reason != CheckInvalid || got.Detail != DetailStateUnavailable {
+		t.Fatalf("empty restart must not mean UNPLEDGED: %+v", got)
+	}
 }
 
 func TestCheck_UnpledgedIsClear(t *testing.T) {
@@ -135,6 +144,14 @@ func TestPledge_CallerMustBeFinancier(t *testing.T) {
 	}
 }
 
+func TestPledge_MissingCallerRejected(t *testing.T) {
+	s := storeAt(1000)
+	got := s.Pledge(PledgeRequest{InvoiceCommitment: inv, Financier: alice})
+	if got.OK || got.Detail != DetailMalformedAddress {
+		t.Fatalf("missing caller must not inherit financier: %+v", got)
+	}
+}
+
 func TestPledge_BorrowerForbidden(t *testing.T) {
 	s := storeAt(1000)
 	got := s.Pledge(PledgeRequest{
@@ -237,6 +254,18 @@ func TestDuplicateRequestIdRejected(t *testing.T) {
 	got := s.Pledge(PledgeRequest{InvoiceCommitment: invB, Financier: bob, Caller: bob, RequestID: "req-1"})
 	if got.OK || got.Detail != DetailReplay {
 		t.Fatalf("replay requestId: %+v", got)
+	}
+}
+
+func TestCheck_DuplicateRequestIdRejected(t *testing.T) {
+	s := storeAt(1000)
+	req := CheckRequest{InvoiceCommitment: inv, RequestID: "check-1"}
+	if first := s.Check(req); !first.Eligible {
+		t.Fatalf("first CHECK: %+v", first)
+	}
+	got := s.Check(req)
+	if got.Eligible || got.Detail != DetailReplay {
+		t.Fatalf("replayed CHECK requestId: %+v", got)
 	}
 }
 

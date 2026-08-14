@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"extension-scaffold/internal/config"
+	"extension-scaffold/internal/machine"
 	"extension-scaffold/pkg/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -19,9 +20,18 @@ import (
 // toHash mirrors teeutils.ToHash for clarity: left-pads a string into a 32-byte hash.
 func toHash(s string) common.Hash { return teeutils.ToHash(s) }
 
+const (
+	cleatCommitment = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	cleatFinancier  = "0x1111111111111111111111111111111111111111"
+)
+
 // buildTestAction constructs a teetypes.Action whose Data.Message is the
 // JSON-encoded DataFixed payload. This is what processAction expects to parse.
 func buildTestAction(opType, opCommand common.Hash, originalMessage []byte) teetypes.Action {
+	return buildTestActionID("0x1234", opType, opCommand, originalMessage)
+}
+
+func buildTestActionID(id string, opType, opCommand common.Hash, originalMessage []byte) teetypes.Action {
 	// DataFixed is the structure that processorutils.Parse extracts from Data.Message.
 	type dataFixed struct {
 		InstructionID      common.Hash    `json:"instructionId"`
@@ -36,6 +46,7 @@ func buildTestAction(opType, opCommand common.Hash, originalMessage []byte) teet
 	}
 
 	df := dataFixed{
+		InstructionID:   common.HexToHash(id),
 		OPType:          opType,
 		OPCommand:       opCommand,
 		OriginalMessage: originalMessage,
@@ -44,10 +55,193 @@ func buildTestAction(opType, opCommand common.Hash, originalMessage []byte) teet
 
 	return teetypes.Action{
 		Data: teetypes.ActionData{
-			ID:            common.HexToHash("0x1234"),
+			ID:            common.HexToHash(id),
 			SubmissionTag: "submit",
 			Message:       msg,
 		},
+	}
+}
+
+func TestProcessAction_CleatRoutesStateMachine(t *testing.T) {
+	store := machine.NewStore()
+	store.CompleteRehydration()
+	e := &Extension{cleat: store}
+
+	run := func(id, command string, payload any) teetypes.ActionResult {
+		t.Helper()
+		message, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		action := buildTestActionID(
+			id,
+			toHash(config.OPTypeCleat),
+			toHash(command),
+			message,
+		)
+		status, body := e.processAction(action)
+		if status != http.StatusOK {
+			t.Fatalf("%s HTTP status=%d body=%s", command, status, body)
+		}
+		var result teetypes.ActionResult
+		if err := json.Unmarshal(body, &result); err != nil {
+			t.Fatalf("%s ActionResult: %v", command, err)
+		}
+		if result.Status != 1 {
+			t.Fatalf("%s status=%d log=%s", command, result.Status, result.Log)
+		}
+		return result
+	}
+
+	check := run("0x101", config.OPCommandCheck, machine.CheckRequest{InvoiceCommitment: cleatCommitment})
+	if _, _, verdict := decodeCleatResultData(t, check.Data); verdict != verdictClear {
+		t.Fatalf("CHECK verdict=%d", verdict)
+	}
+
+	pledge := run("0x102", config.OPCommandPledge, machine.PledgeRequest{
+		InvoiceCommitment: cleatCommitment,
+		Financier:         cleatFinancier,
+		Caller:            cleatFinancier,
+	})
+	if _, _, verdict := decodeCleatResultData(t, pledge.Data); verdict != verdictClear {
+		t.Fatalf("PLEDGE verdict=%d", verdict)
+	}
+
+	status := run("0x103", config.OPCommandStatus, machine.StatusRequest{InvoiceCommitment: cleatCommitment})
+	if _, _, verdict := decodeCleatResultData(t, status.Data); verdict != verdictAlreadyPledged {
+		t.Fatalf("STATUS verdict=%d", verdict)
+	}
+	if strings.Contains(string(status.Data), "invoice") || strings.Contains(string(status.Data), "amount") {
+		t.Fatalf("STATUS leaked invoice fields: %s", status.Data)
+	}
+
+	release := run("0x104", config.OPCommandRelease, machine.ReleaseRequest{
+		InvoiceCommitment: cleatCommitment,
+		Caller:            cleatFinancier,
+		Outcome:           machine.OutcomeRepaid,
+	})
+	if _, _, verdict := decodeCleatResultData(t, release.Data); verdict != verdictReleased {
+		t.Fatalf("RELEASE verdict=%d", verdict)
+	}
+}
+
+func decodeCleatResultData(t *testing.T, data []byte) (common.Hash, common.Hash, uint8) {
+	t.Helper()
+	values, err := cleatResultArgs.Unpack(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(values) != 3 {
+		t.Fatalf("result value count=%d", len(values))
+	}
+	requestID, ok := values[0].([32]byte)
+	if !ok {
+		t.Fatalf("request id type=%T", values[0])
+	}
+	commitment, ok := values[1].([32]byte)
+	if !ok {
+		t.Fatalf("commitment type=%T", values[1])
+	}
+	verdict, ok := values[2].(uint8)
+	if !ok {
+		t.Fatalf("verdict type=%T", values[2])
+	}
+	return common.Hash(requestID), common.Hash(commitment), verdict
+}
+
+func TestProcessAction_CleatAcceptsSolidityABIPayload(t *testing.T) {
+	store := machine.NewStore()
+	store.CompleteRehydration()
+	e := &Extension{cleat: store}
+
+	message, err := cleatMessageArgs.Pack(
+		common.HexToHash(cleatCommitment),
+		common.HexToAddress(cleatFinancier),
+		^uint64(0),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := buildTestActionID(
+		"0xabc",
+		toHash(config.OPTypeCleat),
+		toHash(config.OPCommandPledge),
+		message,
+	)
+
+	status, body := e.processAction(action)
+	if status != http.StatusOK {
+		t.Fatalf("HTTP status=%d body=%s", status, body)
+	}
+	var result teetypes.ActionResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 1 {
+		t.Fatalf("status=%d log=%s", result.Status, result.Log)
+	}
+	requestID, commitment, verdict := decodeCleatResultData(t, result.Data)
+	if requestID != common.HexToHash("0xabc") {
+		t.Fatalf("request id=%s", requestID)
+	}
+	if commitment != common.HexToHash(cleatCommitment) {
+		t.Fatalf("commitment=%s", commitment)
+	}
+	if verdict != verdictClear {
+		t.Fatalf("verdict=%d", verdict)
+	}
+}
+
+func TestProcessAction_CleatMalformedRequests(t *testing.T) {
+	e := &Extension{cleat: machine.NewStore()}
+	for _, command := range []string{
+		config.OPCommandCheck,
+		config.OPCommandPledge,
+		config.OPCommandRelease,
+		config.OPCommandStatus,
+	} {
+		t.Run(command, func(t *testing.T) {
+			action := buildTestAction(
+				toHash(config.OPTypeCleat),
+				toHash(command),
+				[]byte(`{"invoiceCommitment":`),
+			)
+			status, body := e.processAction(action)
+			if status != http.StatusOK {
+				t.Fatalf("HTTP status=%d body=%s", status, body)
+			}
+			var result teetypes.ActionResult
+			if err := json.Unmarshal(body, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Status != 0 || !strings.Contains(result.Log, "decoding") {
+				t.Fatalf("malformed %s result: %+v", command, result)
+			}
+		})
+	}
+}
+
+func TestProcessAction_CleatRejectsRequestIDMismatch(t *testing.T) {
+	payload, _ := json.Marshal(machine.CheckRequest{
+		InvoiceCommitment: cleatCommitment,
+		RequestID:         common.HexToHash("0xbeef").Hex(),
+	})
+	action := buildTestActionID(
+		"0x1234",
+		toHash(config.OPTypeCleat),
+		toHash(config.OPCommandCheck),
+		payload,
+	)
+	status, body := (&Extension{cleat: machine.NewStore()}).processAction(action)
+	if status != http.StatusOK {
+		t.Fatalf("HTTP status=%d body=%s", status, body)
+	}
+	var result teetypes.ActionResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 0 || !strings.Contains(result.Log, "requestId must match instructionId") {
+		t.Fatalf("mismatched requestId result: %+v", result)
 	}
 }
 
