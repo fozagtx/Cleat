@@ -159,11 +159,16 @@ The Next.js server must not decrypt fields, decide eligibility, or invent a verd
 
 ## Next
 
-| | |
+What the desk does today: seal an invoice, send a live Coston2 `CHECK` / `PLEDGE` / `RELEASE`, and record the submission in History with an explorer link. The TEE can answer; the desk does not yet show that answer.
+
+| | Status |
 |---|---|
-| 1 | Bind `RELEASE` to a verified FDC settlement event |
-| 2 | FTSO quotes for cross-currency facilities |
-| 3 | Closed pilot with one factor, then the same image on Flare mainnet |
+| Surface TEE verdict on Review (`CLEAR` / `ALREADY_PLEDGED`) | In progress — next build |
+| Write that verdict into History instead of only `SUBMITTED` | In progress — next build |
+| Consume the attested result through VerificationGateway into PledgeRegistry | Planned |
+| Bind `RELEASE` to a verified FDC settlement event | Planned |
+| FTSO quotes for cross-currency facilities | Planned |
+| Closed pilot with one factor, then the same image on Flare mainnet | Planned |
 
 ## Quick start
 
