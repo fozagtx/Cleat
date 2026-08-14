@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import NextLink from "next/link";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { DeskCard, DeskSkeleton } from "@/components/desk-card";
 import { primaryBtn, secondaryBtn } from "@/components/landing/chrome";
@@ -140,17 +141,17 @@ export function LenderDesk() {
       }
       try {
         await recordProtocolTransaction(command, invoice.commitment, hash);
-      } catch {
-        // Chain is the source of truth; history can lag without failing the desk.
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Could not write this to History.");
       }
       if (command === "check") {
         setDone({ check: true, pledge: false });
-        setMessage("Check landed. Next: press Pledge this invoice if you will fund it.");
+        setMessage("Check is in History. Open History, or Pledge if you will fund it.");
       } else if (command === "pledge") {
         setDone({ check: true, pledge: true });
-        setMessage("Pledge landed. Press Release the pledge only if you will not fund.");
+        setMessage("Pledge is in History. Open History to see it.");
       } else {
-        setMessage("Release landed.");
+        setMessage("Release is in History. Open History to see it.");
       }
     } catch (reason) {
       setMessage(null);
@@ -199,9 +200,7 @@ export function LenderDesk() {
             ? message
             : !done.check
               ? "Next: press 2 · Check this invoice."
-              : !done.pledge
-                ? "Next: press 3 · Pledge this invoice."
-                : "Next: press 4 · Release the pledge only if you will not fund.";
+              : "This instruction is in History. Open History next.";
 
   return (
     <DeskCard
@@ -291,6 +290,27 @@ export function LenderDesk() {
             </li>
           );
         })}
+
+        <li className="grid gap-3 border-t border-[var(--landing-border)] pt-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start sm:gap-5">
+          <span className="landing-mono text-sm tabular-nums text-[var(--landing-muted-fg)]">5</span>
+          <div>
+            <p className="text-sm font-medium">
+              Open History
+              {done.check ? (
+                <span className="ml-2 font-normal text-[var(--landing-muted-fg)]">Go here next</span>
+              ) : null}
+            </p>
+            <p className="mt-1 text-sm text-[var(--landing-muted-fg)]">
+              After Check, Pledge, or Release lands, it shows up on History with the Coston2 explorer link.
+            </p>
+            <NextLink
+              className={`${done.check ? primaryBtn : secondaryBtn} mt-3 ${done.check ? "" : "pointer-events-none opacity-50"}`}
+              href="/activity"
+            >
+              Open History
+            </NextLink>
+          </div>
+        </li>
       </ol>
 
       <div
@@ -302,6 +322,11 @@ export function LenderDesk() {
           <p className="mt-3 text-xl font-medium tracking-[-0.5px]">{nextCopy}</p>
         ) : null}
         {error ? <p className="mt-3 text-sm text-[var(--landing-danger)]">{error}</p> : null}
+        {done.check ? (
+          <NextLink className={`${primaryBtn} mt-4`} href="/activity">
+            Open History
+          </NextLink>
+        ) : null}
         {txHash ? (
           <a
             className="desk-link landing-mono mt-4 inline-flex min-h-10 items-center text-sm"

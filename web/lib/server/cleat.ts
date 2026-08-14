@@ -1,11 +1,13 @@
 import { keccak256 } from "viem";
 
-export const TEE_URL = process.env.EXT_PROXY_URL ?? "";
-export const DIRECT_API_KEY = process.env.DIRECT_API_KEY ?? "";
+import { instructionSenderAddress } from "@/lib/contracts";
+
+export const TEE_URL = process.env.EXT_PROXY_URL || "";
+export const DIRECT_API_KEY = process.env.DIRECT_API_KEY || "";
 export const CHAIN_URL =
-  process.env.CHAIN_URL ?? "https://coston2-api.flare.network/ext/C/rpc";
+  process.env.CHAIN_URL || "https://coston2-api.flare.network/ext/C/rpc";
 export const INSTRUCTION_SENDER = (
-  process.env.INSTRUCTION_SENDER ?? "0xb2289168d6B5d7823060d2eAC676d24917b3bEdC"
+  process.env.INSTRUCTION_SENDER || instructionSenderAddress
 ).toLowerCase();
 
 export const COMMAND_SELECTORS = {

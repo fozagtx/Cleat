@@ -11,9 +11,11 @@ export function ActivityTable() {
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  function load() {
-    setError(null);
-    setRows(null);
+  function load(quiet = false) {
+    if (!quiet) {
+      setError(null);
+      setRows(null);
+    }
     fetchActivity()
       .then(setRows)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Failed"));
@@ -21,14 +23,16 @@ export function ActivityTable() {
 
   useEffect(() => {
     load();
+    const timer = window.setInterval(() => load(true), 4000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  if (error) {
+  if (error && !rows) {
     return (
       <DeskCard
         description={error}
         footer={
-          <button className={ghostBtn} onClick={load} type="button">
+          <button className={ghostBtn} onClick={() => load()} type="button">
             Try again
           </button>
         }
@@ -42,10 +46,10 @@ export function ActivityTable() {
   if (rows.length === 0) {
     return (
       <DeskCard
-        description="Review an invoice first."
+        description="Run a check on Review first. History stays empty until that Coston2 instruction lands."
         footer={
           <NextLink className={navCta} href="/lender">
-            Review an invoice
+            Go to Review
           </NextLink>
         }
         title="Nothing has run yet"

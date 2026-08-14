@@ -95,12 +95,18 @@ export async function recordProtocolTransaction(
   commitment: `0x${string}`,
   txHash: `0x${string}`,
 ) {
-  const res = await fetch(`${API_URL}/activity/transactions`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ command, commitment, txHash }),
-  });
-  const data = (await res.json()) as { ok?: boolean; error?: string };
-  if (!res.ok) throw new Error(data.error ?? "Could not verify transaction");
-  return data;
+  let lastError = "Could not write this instruction to History";
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const res = await fetch(`${API_URL}/activity/transactions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ command, commitment, txHash }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (res.ok) return data;
+    lastError = data.error ?? lastError;
+    if (res.status !== 409) break;
+    await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+  }
+  throw new Error(lastError);
 }
