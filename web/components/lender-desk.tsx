@@ -23,7 +23,7 @@ const functionNames = {
   release: "sendRelease",
 } as const;
 
-type Command = keyof typeof functionNames;
+const DEMO_HANDLES = ["INV-441", "INV-882"] as const;
 
 function transactionError(error: unknown) {
   if (!(error instanceof Error)) return "Transaction failed.";
@@ -55,7 +55,10 @@ export function LenderDesk() {
     fetchLenderInvoices()
       .then((rows) => {
         setInvoices(rows);
-        setSelected((current) => current || rows[0]?.id || "");
+        setSelected((current) => {
+          if (current && rows.some((row) => row.id === current)) return current;
+          return rows.find((row) => row.invoiceNumber === "INV-441")?.id || rows[0]?.id || "";
+        });
       })
       .catch((reason: unknown) =>
         setError(reason instanceof Error ? reason.message : "Could not load invoice handles"),
@@ -68,6 +71,18 @@ export function LenderDesk() {
 
   const invoice = invoices?.find((row) => row.id === selected) ?? invoices?.[0];
   const walletReady = isConnected && chainId === coston2.id && Boolean(address);
+
+  function selectHandle(invoiceNumber: string) {
+    const match = invoices?.find((row) => row.invoiceNumber === invoiceNumber);
+    if (!match) {
+      setError(`${invoiceNumber} is not sealed yet.`);
+      return;
+    }
+    setSelected(match.id);
+    setError(null);
+    setMessage(`Selected ${invoiceNumber}.`);
+    setTxHash(null);
+  }
 
   async function run(command: Command) {
     if (!invoice || !walletReady || !publicClient) return;
@@ -162,7 +177,7 @@ export function LenderDesk() {
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
         <div>
-          <label className="mb-5 block" htmlFor="lender-invoice">
+          <label className="mb-3 block" htmlFor="lender-invoice">
             <span className="landing-mono text-xs tracking-[0.5px] text-[var(--landing-muted-fg)]">
               Sealed invoice
             </span>
@@ -177,13 +192,26 @@ export function LenderDesk() {
               }}
               value={selected}
             >
-              {invoices.map((row, index) => (
+              {invoices.map((row) => (
                 <option key={row.id} value={row.id}>
-                  Invoice handle {index + 1} · {shortHash(row.commitment)}
+                  {row.invoiceNumber} · {shortHash(row.commitment)}
                 </option>
               ))}
             </select>
           </label>
+          <div className="mb-5 flex flex-wrap gap-2">
+            {DEMO_HANDLES.map((invoiceNumber) => (
+              <button
+                className={secondaryBtn}
+                disabled={Boolean(busy)}
+                key={invoiceNumber}
+                onClick={() => selectHandle(invoiceNumber)}
+                type="button"
+              >
+                Select {invoiceNumber}
+              </button>
+            ))}
+          </div>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4 border-b border-[var(--landing-border)] pb-3">
               <dt className="text-[var(--landing-muted-fg)]">Commitment</dt>

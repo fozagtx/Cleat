@@ -19,6 +19,7 @@ export async function GET() {
     invoices: rows.map((row) => ({
       commitment: row.commitments[0].commitment,
       id: row.id,
+      invoiceNumber: row.invoiceNumber,
     })),
   });
 }

@@ -20,6 +20,7 @@ export type ProtocolResult = {
 export type LenderInvoice = {
   id: string;
   commitment: `0x${string}`;
+  invoiceNumber: string;
 };
 
 export type TeeInfo = {
