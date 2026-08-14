@@ -25,19 +25,26 @@ type CreateInvoiceBody = {
 
 export async function GET() {
   const rows = await prisma.invoice.findMany({
-    orderBy: { invoiceNumber: "asc" },
+    orderBy: { createdAt: "desc" },
   });
-
-  return NextResponse.json({
-    invoices: rows.map((row) => ({
+  const seen = new Set<string>();
+  const invoices = [];
+  for (const row of rows) {
+    const invoiceNumber = row.invoiceNumber.trim();
+    if (seen.has(invoiceNumber)) continue;
+    seen.add(invoiceNumber);
+    invoices.push({
       amountMinor: row.amountMinor.toString(),
       currency: row.currency,
       debtorName: row.debtorName,
       dueDate: row.dueDate.toISOString(),
       id: row.id,
-      invoiceNumber: row.invoiceNumber,
-    })),
-  });
+      invoiceNumber,
+    });
+  }
+  invoices.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber));
+
+  return NextResponse.json({ invoices });
 }
 
 export async function POST(request: NextRequest) {
@@ -131,8 +138,26 @@ export async function POST(request: NextRequest) {
         update: {},
         where: { address },
       });
-      return database.invoice.create({
-        data: {
+      return database.invoice.upsert({
+        where: {
+          borrowerId_invoiceNumber: {
+            borrowerId: borrower.id,
+            invoiceNumber: invoiceNumber.trim(),
+          },
+        },
+        update: {
+          amountMinor,
+          currency: currency.toUpperCase(),
+          debtorName: debtorName.trim(),
+          dueDate,
+          commitments: {
+            create: {
+              commitment: commitment.toLowerCase(),
+              encryptedBlob: Buffer.from(encryptedBlob.slice(2), "hex"),
+            },
+          },
+        },
+        create: {
           amountMinor,
           borrowerId: borrower.id,
           commitments: {

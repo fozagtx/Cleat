@@ -120,6 +120,13 @@ async function main() {
   });
 
   for (const draft of drafts) {
+    const existing = await prisma.invoice.findFirst({
+      where: { invoiceNumber: draft.invoiceNumber },
+    });
+    if (existing) {
+      console.log(`skip ${draft.invoiceNumber} (already sealed)`);
+      continue;
+    }
     const sealed = await seal(draft, tee);
     await deliver(sealed.encryptedBlob);
     await prisma.invoice.upsert({

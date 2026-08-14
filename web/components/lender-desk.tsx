@@ -331,11 +331,6 @@ export function LenderDesk() {
           <p className="mt-3 text-xl font-medium tracking-[-0.5px]">{nextCopy}</p>
         ) : null}
         {error ? <p className="mt-3 text-sm text-[var(--landing-danger)]">{error}</p> : null}
-        {done.check ? (
-          <NextLink className={`${primaryBtn} mt-4`} href="/activity">
-            Open History
-          </NextLink>
-        ) : null}
         {txHash ? (
           <a
             className="desk-link landing-mono mt-4 inline-flex min-h-10 items-center text-sm"
