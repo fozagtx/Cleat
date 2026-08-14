@@ -4,7 +4,9 @@
 
 # Cleat
 
-A company wants a loan against one unpaid invoice. A lender needs to know if that invoice is already pledged as collateral somewhere else. Today the borrower has to send the whole customer list. Cleat answers only that one question: **already used here, or free to fund.** Other invoices, customer names, and amounts stay private.
+**Confidential:** customer names, invoice amounts, due dates, and every other receivable. The lender never sees them.
+
+A company wants a loan against one unpaid invoice. The lender only needs to know if that invoice is already pledged as collateral. Today the borrower has to send the whole customer list. Cleat answers that one question: **already used here, or free to fund.** The rest of the book stays in the TEE.
 
 Receivables desk on [Flare Confidential Compute](https://dev.flare.network/fcc/overview). Built for [Flare Summer Signal](https://dorahacks.io/hackathon/flaresummersignal/detail), Confidential Compute Apps.
 
