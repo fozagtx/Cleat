@@ -1,0 +1,58 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "../styles/themes.css";
+
+@theme inline {
+  --color-content1: var(--surface);
+  --color-content2: var(--surface-secondary);
+  --color-content2-foreground: var(--foreground);
+  --color-content3: var(--surface-tertiary);
+  --color-content3-foreground: var(--foreground);
+  --color-default-50: #f4f4f5;
+  --color-default-100: #e4e4e7;
+  --color-default-200: #d4d4d8;
+  --color-default-400: #a1a1aa;
+  --color-default-500: #71717a;
+  --color-default-900: #18181b;
+}
+
+@utility text-tiny {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+@utility text-small {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+@utility text-medium {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+@utility text-large {
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+@utility rounded-large {
+  border-radius: 14px;
+}
+@utility rounded-medium {
+  border-radius: 12px;
+}
+@utility border-small {
+  border-width: 1px;
+}
+@utility shadow-small {
+  box-shadow:
+    0 1px 2px rgb(15 23 42 / 0.06),
+    0 1px 3px rgb(15 23 42 / 0.08);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+}

@@ -1,0 +1,26 @@
+import { http, createConfig } from "wagmi";
+import { injected } from "wagmi/connectors";
+import { defineChain } from "viem";
+
+export const coston2 = defineChain({
+  id: 114,
+  name: "Coston2",
+  nativeCurrency: { name: "Coston2 Flare", symbol: "C2FLR", decimals: 18 },
+  rpcUrls: {
+    default: { http: ["https://coston2-api.flare.network/ext/C/rpc"] },
+  },
+  blockExplorers: {
+    default: { name: "Coston2 Explorer", url: "https://coston2-explorer.flare.network" },
+  },
+  testnet: true,
+});
+
+export const wagmiConfig = createConfig({
+  chains: [coston2],
+  connectors: [injected({ target: "metaMask" })],
+  transports: {
+    [coston2.id]: http("https://coston2-api.flare.network/ext/C/rpc"),
+  },
+  ssr: true,
+  multiInjectedProviderDiscovery: true,
+});

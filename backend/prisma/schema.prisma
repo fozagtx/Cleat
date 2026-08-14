@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Application store. Never the source of eligible / ACTIVE.
+
+model User {
+  id        String   @id @default(cuid())
+  address   String   @unique
+  role      String
+  createdAt DateTime @default(now())
+  invoices  Invoice[]
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String
+  debtorName    String
+  currency      String
+  amountMinor   BigInt
+  dueDate       DateTime
+  borrowerId    String
+  borrower      User     @relation(fields: [borrowerId], references: [id])
+  createdAt     DateTime @default(now())
+  commitments   InvoiceCommitment[]
+
+  @@unique([borrowerId, invoiceNumber])
+  @@map("invoices")
+}
+
+model InvoiceCommitment {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id])
+  commitment   String   @unique
+  encryptedBlob Bytes
+  createdAt    DateTime @default(now())
+
+  @@map("invoice_commitments")
+}
+
+model FinancingRequest {
+  id           String   @id @default(cuid())
+  commitment   String
+  financier    String
+  status       String
+  createdAt    DateTime @default(now())
+
+  @@map("financing_requests")
+}
+
+model Financing {
+  id           String   @id @default(cuid())
+  commitment   String
+  financier    String
+  status       String
+  startedAt    DateTime @default(now())
+  endedAt      DateTime?
+
+  @@map("financings")
+}
+
+model VerificationRequest {
+  id          String   @id @default(cuid())
+  requestId   String   @unique
+  commitment  String
+  command     String
+  createdAt   DateTime @default(now())
+
+  @@map("verification_requests")
+}
+
+model TeeResult {
+  id          String   @id @default(cuid())
+  requestId   String
+  eligible    Boolean?
+  reason      String
+  rawJson     Json
+  createdAt   DateTime @default(now())
+
+  @@map("tee_results")
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  event     String
+  result    String
+  commitment String?
+  txHash    String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_events")
+}
