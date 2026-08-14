@@ -82,8 +82,7 @@ COPY --chmod=755 --chown=65532:65532 --from=builder /app/extension-tee /app/exte
 # overrides it via MODE=${MODE:-1}.
 #
 # For a real Confidential Space deploy this MUST be 0 — FTDC rejects simulated
-# attestation. See docs/deployment-steps.md §5. Keep this value identical across
-# the workload image and VM metadata.
+# attestation. Keep this value identical across the workload image and VM metadata.
 ENV MODE=1 CHAIN_ID=31337 SIMULATED_TEE=true REHYDRATION_ENABLED=false CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
 
 # match tee-node: run as root (USER 0:0) — the TEE workload itself is the isolation boundary

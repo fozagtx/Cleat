@@ -3,9 +3,7 @@
 //
 // This lives in the extension module (not tools/) because it links the Go
 // extension in-process — it is a Go-path development convenience, not
-// deployment tooling. tools/ must stay independent of any one language
-// implementation so that it can deploy and test all of them; see
-// docs/extension-contract.md.
+// deployment tooling. tools/ stays independent of the extension implementation.
 //
 // Consequently `--local` mode is Go-only. start-services.sh rejects it for
 // other languages and points at Docker Compose instead.

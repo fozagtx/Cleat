@@ -4,7 +4,7 @@
 # Built once as local/tee-node-base:${TEE_NODE_REF} and consumed by every
 # two-process language image, so a new language's Dockerfile is ~30 lines rather
 # than ~110. The Go image does not use this: it links tee-node as a library and
-# ships a single binary (see go/Dockerfile and docs/extension-contract.md §1).
+# ships a single binary (see go/Dockerfile).
 #
 # Build directly:
 #   docker build -f docker/node-base.Dockerfile --build-arg TEE_NODE_REF=<ref> -t local/tee-node-base:<ref> docker/

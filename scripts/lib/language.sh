@@ -10,8 +10,6 @@
 # language. Adding a language means creating <dir>/language.env plus a
 # conforming Dockerfile — no script in this repo needs to change.
 #
-# See docs/extension-contract.md §8.
-
 # list_languages <project_dir> — print available language directory names.
 list_languages() {
     local root="${1:?list_languages requires the project dir}"
@@ -37,7 +35,7 @@ load_language() {
         available="$(list_languages "$root" | tr '\n' ' ')"
         echo "[language] ERROR: unknown LANGUAGE '$lang' — no $lang/language.env found." >&2
         echo "[language]        Available: ${available:-<none>}" >&2
-        echo "[language]        To add one, see docs/extension-contract.md §8." >&2
+        echo "[language]        Add a directory containing language.env and a conforming Dockerfile." >&2
         return 1
     fi
 

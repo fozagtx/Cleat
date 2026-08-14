@@ -96,7 +96,7 @@ Extension ID: `0x00000000000000000000000000000000000000000000000000000000000102e
 FCC workload image:
 `us-central1-docker.pkg.dev/cleat-505513/cleat/extension-tee@sha256:c1e54c02a3b68fee45af016a89808c7156ac2e217869d4f4ead522039428b18d`
 
-Extension proxy: [`https://34.70.0.65.sslip.io`](https://34.70.0.65.sslip.io/info)
+Extension proxy: [`https://cleat.34.70.0.65.sslip.io`](https://cleat.34.70.0.65.sslip.io/info)
 
 TEE ID: `0x2F6FFbdF37920b297E3b324548CcE9A30A2bC1ad` (initialized on Coston2; not yet promoted to active because the external FTDC availability proof has not been produced)
 

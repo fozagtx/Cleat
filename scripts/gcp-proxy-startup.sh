@@ -10,6 +10,8 @@ mkdir -p "${DOCKER_CONFIG}"
 docker-credential-gcr configure-docker --registries="${REGISTRY}"
 docker network create "${NETWORK}" 2>/dev/null || true
 docker volume create cleat-mysql >/dev/null
+docker volume create cleat-caddy-data >/dev/null
+docker volume create cleat-caddy-config >/dev/null
 docker rm -f caddy proxy redis indexer mysql >/dev/null 2>&1 || true
 
 metadata() {
@@ -74,4 +76,6 @@ docker run -d --restart always \
   --network "${NETWORK}" \
   -p 80:80 \
   -p 443:443 \
+  -v cleat-caddy-data:/data \
+  -v cleat-caddy-config:/config \
   caddy:2-alpine caddy reverse-proxy --from "https://${DOMAIN}" --to "proxy:6664"

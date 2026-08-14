@@ -91,7 +91,7 @@ esac
 
 # --- Resolve LANGUAGE by directory convention ---------------------------------
 # Discovery is driven by <LANGUAGE>/language.env; there is deliberately no
-# hardcoded list here (see docs/extension-contract.md §8).
+# hardcoded list here.
 # shellcheck source=lib/language.sh
 source "$SCRIPT_DIR/lib/language.sh"
 load_language "$PROJECT_DIR" || die "could not resolve LANGUAGE"
@@ -165,7 +165,7 @@ TUNNEL_ACTIVE=false
 sync_tunnel() {
     local cf_compose="$PROJECT_DIR/docker-compose.cloudflared.yaml"
     local -a proj=()   # empty → project "tunnel", from the compose file's `name:`
-    [[ -f "$cf_compose" ]] || die "$cf_compose not found — see docs/cloudflared.md"
+    [[ -f "$cf_compose" ]] || die "$cf_compose not found"
 
     if [[ "$USE_LOCAL" == "true" ]]; then
         # Host Go proxy is on 6664: a different origin would recreate the shared

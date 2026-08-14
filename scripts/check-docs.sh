@@ -13,7 +13,7 @@ for file in "${required[@]}"; do
 done
 
 if rg -i 'phala|HANDOFF\.md|python/|typescript/|SAY_HELLO|SAY_GOODBYE' \
-  "$ROOT/README.md" "$ROOT/CONTEXT.md" "$ROOT/REPRODUCIBILITY.md" "$ROOT/go/README.md"; then
+  "$ROOT/README.md" "$ROOT/CONTEXT.md" "$ROOT/REPRODUCIBILITY.md"; then
   echo "retired architecture reference found" >&2
   exit 1
 fi

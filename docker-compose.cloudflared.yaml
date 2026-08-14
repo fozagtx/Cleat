@@ -10,4 +10,4 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # No restart policy: a quick-tunnel restart mints a new URL and strands
-    # EXT_PROXY_URL. Named tunnel (TUNNEL_ARGS) is stable — see docs/cloudflared.md.
+    # EXT_PROXY_URL. Use TUNNEL_ARGS with a named tunnel for a stable hostname.
