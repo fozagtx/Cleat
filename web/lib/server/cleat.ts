@@ -5,7 +5,7 @@ export const DIRECT_API_KEY = process.env.DIRECT_API_KEY ?? "";
 export const CHAIN_URL =
   process.env.CHAIN_URL ?? "https://coston2-api.flare.network/ext/C/rpc";
 export const INSTRUCTION_SENDER = (
-  process.env.INSTRUCTION_SENDER ?? "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE"
+  process.env.INSTRUCTION_SENDER ?? "0xb2289168d6B5d7823060d2eAC676d24917b3bEdC"
 ).toLowerCase();
 
 export const COMMAND_SELECTORS = {

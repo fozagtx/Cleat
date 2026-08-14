@@ -1,7 +1,7 @@
 import type { Address } from "viem";
 
 export const instructionSenderAddress =
-  "0x1a9C4A0f9D76c0b1D91d22E24E573a9b377618aE" satisfies Address;
+  "0xb2289168d6B5d7823060d2eAC676d24917b3bEdC" satisfies Address;
 
 export const instructionFee = BigInt(1_000_000);
 
