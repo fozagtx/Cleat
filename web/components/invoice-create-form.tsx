@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { createInvoice, fetchTeeInfo } from "@/lib/api";
-import { primaryBtn } from "@/components/landing/chrome";
+import { primaryBtn, secondaryBtn } from "@/components/landing/chrome";
 import { invoiceAuthorizationMessage, sealInvoice } from "@/lib/seal";
 import { coston2 } from "@/lib/wagmi";
 
@@ -12,6 +12,25 @@ type Props = {
 };
 
 const fieldClass = "desk-select mt-2";
+
+const DEMO_INVOICES = [
+  {
+    amount: "42000.00",
+    currency: "USD",
+    debtorName: "Northwind Trading",
+    dueDate: "2026-12-15",
+    invoiceNumber: "INV-441",
+    label: "Northwind $42,000",
+  },
+  {
+    amount: "185000.00",
+    currency: "EUR",
+    debtorName: "Harbor Goods",
+    dueDate: "2026-11-01",
+    invoiceNumber: "INV-882",
+    label: "Harbor €185,000",
+  },
+] as const;
 
 function fiatToMinor(value: string) {
   const match = value.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
@@ -25,7 +44,23 @@ export function InvoiceCreateForm({ onCreated }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [debtorName, setDebtorName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState("USD");
+  const [dueDate, setDueDate] = useState("");
   const walletReady = isConnected && chainId === coston2.id && Boolean(address);
+
+  function fillDemo(index: number) {
+    const demo = DEMO_INVOICES[index];
+    setInvoiceNumber(demo.invoiceNumber);
+    setDebtorName(demo.debtorName);
+    setAmount(demo.amount);
+    setCurrency(demo.currency);
+    setDueDate(demo.dueDate);
+    setError(null);
+    setSuccess(`Loaded ${demo.label}.`);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,14 +69,13 @@ export function InvoiceCreateForm({ onCreated }: Props) {
     setError(null);
     setSuccess(null);
     const formElement = event.currentTarget;
-    const form = new FormData(formElement);
     try {
       const draft = {
-        amountMinor: fiatToMinor(String(form.get("amount") ?? "")),
-        currency: String(form.get("currency") ?? ""),
-        debtorName: String(form.get("debtorName") ?? ""),
-        dueDate: String(form.get("dueDate") ?? ""),
-        invoiceNumber: String(form.get("invoiceNumber") ?? ""),
+        amountMinor: fiatToMinor(amount),
+        currency,
+        debtorName,
+        dueDate,
+        invoiceNumber,
       };
       const tee = await fetchTeeInfo();
       const sealed = await sealInvoice(draft, tee);
@@ -54,6 +88,11 @@ export function InvoiceCreateForm({ onCreated }: Props) {
         ...sealed.authorization,
       });
       formElement.reset();
+      setInvoiceNumber("");
+      setDebtorName("");
+      setAmount("");
+      setCurrency("USD");
+      setDueDate("");
       setSuccess(`Sealed ${sealed.commitment.slice(0, 10)}… inside the TEE.`);
       onCreated();
     } catch (reason) {
@@ -77,6 +116,19 @@ export function InvoiceCreateForm({ onCreated }: Props) {
         <p className="mt-2 max-w-2xl text-sm text-[var(--landing-muted-fg)]">
           The browser encrypts the invoice to the measured TEE before delivery. Lenders receive only its commitment.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {DEMO_INVOICES.map((demo, index) => (
+            <button
+              className={secondaryBtn}
+              disabled={busy}
+              key={demo.invoiceNumber}
+              onClick={() => fillDemo(index)}
+              type="button"
+            >
+              Fill {demo.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -87,8 +139,10 @@ export function InvoiceCreateForm({ onCreated }: Props) {
             className={fieldClass}
             id="invoice-number"
             name="invoiceNumber"
+            onChange={(event) => setInvoiceNumber(event.target.value)}
             required
             type="text"
+            value={invoiceNumber}
           />
         </label>
         <label className="block" htmlFor="debtor-name">
@@ -98,8 +152,10 @@ export function InvoiceCreateForm({ onCreated }: Props) {
             className={fieldClass}
             id="debtor-name"
             name="debtorName"
+            onChange={(event) => setDebtorName(event.target.value)}
             required
             type="text"
+            value={debtorName}
           />
         </label>
         <label className="block" htmlFor="invoice-amount">
@@ -111,15 +167,23 @@ export function InvoiceCreateForm({ onCreated }: Props) {
             inputMode="decimal"
             min="0.01"
             name="amount"
+            onChange={(event) => setAmount(event.target.value)}
             placeholder="100000.00"
             required
             step="0.01"
             type="number"
+            value={amount}
           />
         </label>
         <label className="block" htmlFor="invoice-currency">
           <span className="text-sm">Currency</span>
-          <select className={fieldClass} defaultValue="USD" id="invoice-currency" name="currency">
+          <select
+            className={fieldClass}
+            id="invoice-currency"
+            name="currency"
+            onChange={(event) => setCurrency(event.target.value)}
+            value={currency}
+          >
             <option value="USD">USD</option>
             <option value="EUR">EUR</option>
             <option value="GBP">GBP</option>
@@ -127,7 +191,15 @@ export function InvoiceCreateForm({ onCreated }: Props) {
         </label>
         <label className="block md:col-span-2" htmlFor="invoice-due-date">
           <span className="text-sm">Due date</span>
-          <input className={fieldClass} id="invoice-due-date" name="dueDate" required type="date" />
+          <input
+            className={fieldClass}
+            id="invoice-due-date"
+            name="dueDate"
+            onChange={(event) => setDueDate(event.target.value)}
+            required
+            type="date"
+            value={dueDate}
+          />
         </label>
       </div>
 
