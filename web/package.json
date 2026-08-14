@@ -9,7 +9,8 @@
     "lint": "eslint",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "node scripts/seed-demo-invoices.mjs"
   },
   "dependencies": {
     "@heroui/styles": "^3.2.4",
